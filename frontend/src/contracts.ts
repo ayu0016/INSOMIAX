@@ -58,3 +58,4 @@ export type SkillMatchResponse = {
   numerical_score_available: false; persisted: false;
 };
 export type AcceptedArtifact<T> = { id: string; label: string; data: T };
+export type ModuleId = "dashboard" | "jd" | "resume" | "profile" | "matching" | "talent";

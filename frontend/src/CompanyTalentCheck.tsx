@@ -1,4 +1,6 @@
 import { useState } from "react";
+import ModuleNavigation from "./ModuleNavigation";
+import type { ModuleId } from "./contracts";
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
@@ -12,7 +14,7 @@ type ApiErrorPayload = { error?: { code?: string; message?: string; details?: { 
 type HealthPayload = { database_configured?: boolean; auth_configured?: boolean };
 type ViewState = "idle" | "loading" | "authentication" | "configuration" | "unavailable" | "schema" | "error";
 
-export default function CompanyTalentCheck({ onNavigate }: { onNavigate: (module: "jd" | "resume" | "profile" | "matching" | "talent") => void }) {
+export default function CompanyTalentCheck({ onNavigate }: { onNavigate: (module: ModuleId) => void }) {
   const [state, setState] = useState<ViewState>("idle");
   const [message, setMessage] = useState<string>("");
   const [source, setSource] = useState<SourceMetadata | null>(null);
@@ -50,7 +52,7 @@ export default function CompanyTalentCheck({ onNavigate }: { onNavigate: (module
   }
 
   return <main className="shell">
-    <header className="topbar"><div className="brand-mark">R</div><div className="brand-name">RADIX <span>TALENT MATCH</span></div><nav className="module-nav" aria-label="RADIX modules"><button className="nav-button" onClick={() => onNavigate("jd")}>JD Analytics</button><button className="nav-button" onClick={() => onNavigate("resume")}>Resume Parsing</button><button className="nav-button" onClick={() => onNavigate("profile")}>Profile Builder</button><button className="nav-button" onClick={() => onNavigate("matching")}>Skill Matching</button><span className="nav-current" aria-current="page">Talent Check</span></nav></header>
+    <ModuleNavigation active="talent" onNavigate={onNavigate} />
     <section className="hero"><div className="eyebrow">COMPANY TALENT CHECK</div><h1>Inspect verified competencies.<br /><em>Keep the source visible.</em></h1><p>Company expectations must come from the official staging table. Readiness stays disabled until source mapping and an approved scoring policy are available.</p></section>
     <section className="panel" aria-labelledby="source-heading"><div className="eyebrow">OFFICIAL SOURCE</div><h2 id="source-heading">Company competency data</h2>
       <p className="hint">This page never substitutes demo records or illustrative company benchmarks for the staging table.</p>

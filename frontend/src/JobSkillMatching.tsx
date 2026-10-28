@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import type { AcceptedArtifact, CandidateProfile, JDAnalysisResult, SkillMatchFinding, SkillMatchResponse } from "./contracts";
+import ModuleNavigation from "./ModuleNavigation";
+import type { AcceptedArtifact, CandidateProfile, JDAnalysisResult, ModuleId, SkillMatchFinding, SkillMatchResponse } from "./contracts";
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
-type ModuleName = "jd" | "resume" | "profile" | "talent";
-
 async function responseError(response: Response): Promise<Error> {
   const body = await response.json().catch(() => null);
   const fields = (body?.error?.details?.errors || []).map((item: { loc?: string[] }) => item.loc?.filter(part => part !== "body").join(" → ")).filter(Boolean);
@@ -13,13 +12,15 @@ async function responseError(response: Response): Promise<Error> {
 export default function JobSkillMatching({ jobDescriptions, candidateProfiles, onNavigate }: {
   jobDescriptions: AcceptedArtifact<JDAnalysisResult>[];
   candidateProfiles: AcceptedArtifact<CandidateProfile>[];
-  onNavigate: (module: ModuleName) => void;
+  onNavigate: (module: ModuleId) => void;
 }) {
   const [jobId, setJobId] = useState("");
   const [profileId, setProfileId] = useState("");
   const [result, setResult] = useState<SkillMatchResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const selectedJob = jobDescriptions.find(item => item.id === jobId) || null;
+  const selectedProfile = candidateProfiles.find(item => item.id === profileId) || null;
 
   useEffect(() => { if (!jobDescriptions.some(item => item.id === jobId)) setJobId(jobDescriptions[0]?.id || ""); }, [jobDescriptions, jobId]);
   useEffect(() => { if (!candidateProfiles.some(item => item.id === profileId)) setProfileId(candidateProfiles[0]?.id || ""); }, [candidateProfiles, profileId]);
@@ -38,11 +39,15 @@ export default function JobSkillMatching({ jobDescriptions, candidateProfiles, o
   }
 
   return <main className="shell">
-    <header className="topbar"><div className="brand-mark">R</div><div className="brand-name">RADIX <span>TALENT MATCH</span></div><nav className="module-nav" aria-label="RADIX modules"><button className="nav-button" onClick={() => onNavigate("jd")}>JD Analytics</button><button className="nav-button" onClick={() => onNavigate("resume")}>Resume Parsing</button><button className="nav-button" onClick={() => onNavigate("profile")}>Profile Builder</button><span className="nav-current" aria-current="page">Skill Matching</span><button className="nav-button" onClick={() => onNavigate("talent")}>Talent Check</button></nav></header>
+    <ModuleNavigation active="matching" onNavigate={onNavigate} />
     <section className="hero"><div className="eyebrow">JOB SKILL MATCHING</div><h1>Compare documented evidence.<br /><em>Review every decision.</em></h1><p>Exact skill terms and reviewed mappings are compared deterministically. A keyword match does not establish proficiency, qualification, or fit.</p></section>
     <section className="panel" aria-labelledby="matching-input-heading"><div className="eyebrow">ACCEPTED SESSION DATA</div><h2 id="matching-input-heading">Choose inputs</h2>
       <label className="field-label" htmlFor="matching-jd">Accepted job description</label><select id="matching-jd" value={jobId} disabled={!jobDescriptions.length} onChange={event => { setJobId(event.target.value); setResult(null); }}><option value="">{jobDescriptions.length ? "Choose an accepted job description" : "No accepted JD available"}</option>{jobDescriptions.map(item => <option value={item.id} key={item.id}>{item.label}</option>)}</select>
       <label className="field-label" htmlFor="matching-profile">Accepted candidate profile</label><select id="matching-profile" value={profileId} disabled={!candidateProfiles.length} onChange={event => { setProfileId(event.target.value); setResult(null); }}><option value="">{candidateProfiles.length ? "Choose an accepted candidate profile" : "No accepted profile available"}</option>{candidateProfiles.map(item => <option value={item.id} key={item.id}>{item.label}</option>)}</select>
+      {(selectedJob || selectedProfile) && <div className="selected-artifacts" aria-label="Selected matching inputs">
+        {selectedJob && <div><strong>Job:</strong> {selectedJob.label}<button className="text-button" onClick={() => onNavigate("jd")}>Review source</button></div>}
+        {selectedProfile && <div><strong>Candidate:</strong> {selectedProfile.label}<button className="text-button" onClick={() => onNavigate("profile")}>Review source</button></div>}
+      </div>}
       {!jobDescriptions.length && <div className="notice">No accepted JD Analytics result is available. Analyze and accept a job description first.</div>}
       {!candidateProfiles.length && <div className="notice">No accepted candidate profile is available. Review and accept a profile in Profile Builder first.</div>}
       <button onClick={compare} disabled={busy || !jobId || !profileId}>{busy ? "Comparing…" : "Compare documented skills"}</button>

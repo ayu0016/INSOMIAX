@@ -126,13 +126,12 @@ def test_missing_or_invalid_match_inputs_are_rejected(payload):
         SkillMatchRequest.model_validate(payload)
 
 
-def test_matching_endpoint_local_auth_and_validation_error_envelope(monkeypatch):
+def test_matching_endpoint_contract_and_validation_envelope_for_authenticated_user(client, monkeypatch):
     monkeypatch.setenv("RADIX_ENV", "development")
     monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
     payload = {"job_description": jd([job_skill("Python")]).model_dump(mode="json"), "candidate_profile": profile(skills=[{"skill_name": "Python", "category_code": "COD", "source": "manual", "evidence_kind": "manual"}]).model_dump(mode="json")}
-    with TestClient(app) as client:
-        valid = client.post("/api/v1/skill-matches", json=payload)
-        invalid = client.post("/api/v1/skill-matches", json={"extra": "bad"})
+    valid = client.post("/api/v1/skill-matches", json=payload)
+    invalid = client.post("/api/v1/skill-matches", json={"extra": "bad"})
     assert valid.status_code == 200
     assert len(valid.json()["matched"]) == 1
     assert valid.json()["numerical_score_available"] is False
@@ -142,6 +141,15 @@ def test_matching_endpoint_local_auth_and_validation_error_envelope(monkeypatch)
 
 def test_matching_endpoint_keeps_supabase_auth_outside_explicit_local_mode(monkeypatch):
     monkeypatch.setenv("RADIX_ENV", "production")
+    monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
+    with TestClient(app) as client:
+        response = client.post("/api/v1/skill-matches", json={})
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+
+
+def test_matching_endpoint_stays_protected_in_jd_only_local_mode(monkeypatch):
+    monkeypatch.setenv("RADIX_ENV", "development")
     monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
     with TestClient(app) as client:
         response = client.post("/api/v1/skill-matches", json={})

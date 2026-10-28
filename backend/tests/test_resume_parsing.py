@@ -102,42 +102,39 @@ def test_resume_skill_aliases_only_apply_when_explicitly_configured(tmp_path):
     assert result.skills[0].evidence_kind == "explicit"
 
 
-def test_resume_extract_endpoints_accept_pdf_and_docx_without_supabase_credentials(monkeypatch):
+def test_resume_extract_endpoints_accept_pdf_and_docx_with_authenticated_test_user(client, monkeypatch):
     monkeypatch.setenv("RADIX_ENV", "development")
     monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
     docx = make_docx(sample_resume())
     pdf = make_pdf(sample_resume())
-    with TestClient(app) as client:
-        for filename, mime, content in (
-            ("resume.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", docx),
-            ("resume.pdf", "application/pdf", pdf),
-        ):
-            extracted = client.post("/api/v1/resume-parsing/extract", files={"file": (filename, content, mime)})
-            assert extracted.status_code == 200
-            parsed = client.post("/api/v1/resume-parsing/parse", json={"text": extracted.json()["text"], "source_file": filename})
-            assert parsed.status_code == 200
-            assert parsed.json()["source_type"] == "resume"
-            assert parsed.json()["candidate_name"]["value"] == "Asha Verma"
-            assert parsed.json()["scores_available"] is False
+    for filename, mime, content in (
+        ("resume.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", docx),
+        ("resume.pdf", "application/pdf", pdf),
+    ):
+        extracted = client.post("/api/v1/resume-parsing/extract", files={"file": (filename, content, mime)})
+        assert extracted.status_code == 200
+        parsed = client.post("/api/v1/resume-parsing/parse", json={"text": extracted.json()["text"], "source_file": filename})
+        assert parsed.status_code == 200
+        assert parsed.json()["source_type"] == "resume"
+        assert parsed.json()["candidate_name"]["value"] == "Asha Verma"
+        assert parsed.json()["scores_available"] is False
 
 
-def test_resume_endpoint_reports_unsupported_malformed_oversized_and_invalid_text(monkeypatch):
+def test_resume_endpoint_reports_unsupported_malformed_oversized_and_invalid_text(client, monkeypatch):
     monkeypatch.setenv("RADIX_ENV", "development")
     monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
-    with TestClient(app) as client:
-        unsupported = client.post("/api/v1/resume-parsing/extract", files={"file": ("cv.txt", b"no", "text/plain")})
-        malformed = client.post("/api/v1/resume-parsing/extract", files={"file": ("cv.pdf", b"not pdf", "application/pdf")})
-        empty_file = client.post("/api/v1/resume-parsing/extract", files={"file": ("cv.pdf", b"", "application/pdf")})
-        assert unsupported.status_code == 415 and unsupported.json()["error"]["code"] == "UNSUPPORTED_FILE_TYPE"
-        assert malformed.status_code == 422 and malformed.json()["error"]["code"] == "UNREADABLE_DOCUMENT"
-        assert sample_resume() not in malformed.text
-        assert empty_file.status_code == 422 and empty_file.json()["error"]["code"] == "EMPTY_DOCUMENT"
-        empty = client.post("/api/v1/resume-parsing/parse", json={"text": "  "})
-        assert empty.status_code == 422 and empty.json()["error"]["code"] == "VALIDATION_ERROR"
+    unsupported = client.post("/api/v1/resume-parsing/extract", files={"file": ("cv.txt", b"no", "text/plain")})
+    malformed = client.post("/api/v1/resume-parsing/extract", files={"file": ("cv.pdf", b"not pdf", "application/pdf")})
+    empty_file = client.post("/api/v1/resume-parsing/extract", files={"file": ("cv.pdf", b"", "application/pdf")})
+    assert unsupported.status_code == 415 and unsupported.json()["error"]["code"] == "UNSUPPORTED_FILE_TYPE"
+    assert malformed.status_code == 422 and malformed.json()["error"]["code"] == "UNREADABLE_DOCUMENT"
+    assert sample_resume() not in malformed.text
+    assert empty_file.status_code == 422 and empty_file.json()["error"]["code"] == "EMPTY_DOCUMENT"
+    empty = client.post("/api/v1/resume-parsing/parse", json={"text": "  "})
+    assert empty.status_code == 422 and empty.json()["error"]["code"] == "VALIDATION_ERROR"
 
     monkeypatch.setenv("RADIX_JD_MAX_UPLOAD_BYTES", "20")
-    with TestClient(app) as client:
-        too_large = client.post("/api/v1/resume-parsing/extract", files={"file": ("cv.docx", make_docx(sample_resume()), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
+    too_large = client.post("/api/v1/resume-parsing/extract", files={"file": ("cv.docx", make_docx(sample_resume()), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
     assert too_large.status_code == 413
     assert too_large.json()["error"]["code"] == "UPLOAD_TOO_LARGE"
 
@@ -149,3 +146,13 @@ def test_resume_parse_preserves_protected_auth_default(monkeypatch):
         response = client.post("/api/v1/resume-parsing/parse", json={"text": sample_resume()})
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+
+
+def test_resume_routes_do_not_inherit_jd_local_anonymous_access(monkeypatch):
+    monkeypatch.setenv("RADIX_ENV", "development")
+    monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
+    with TestClient(app) as client:
+        extracted = client.post("/api/v1/resume-parsing/extract", files={"file": ("resume.docx", make_docx(sample_resume()), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
+        parsed = client.post("/api/v1/resume-parsing/parse", json={"text": sample_resume()})
+    assert extracted.status_code == parsed.status_code == 401
+    assert extracted.json()["error"]["code"] == parsed.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"

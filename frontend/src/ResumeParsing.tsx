@@ -1,4 +1,6 @@
 import { useState } from "react";
+import ModuleNavigation from "./ModuleNavigation";
+import type { ModuleId } from "./contracts";
 
 type Contact = { value: string; evidence: string } | null;
 type Entry = { text: string; evidence: string; source_section: string; dates: string | null; duration: string | null };
@@ -17,7 +19,7 @@ async function getError(response: Response): Promise<Error> {
   return new Error(body?.error?.message || "The request failed. Check the backend and try again.");
 }
 
-export default function ResumeParsing({ onNavigate, onAccept, onInvalidate }: { onNavigate: (module: "jd" | "profile" | "matching" | "talent") => void; onAccept: (draft: ResumeDraft) => void; onInvalidate: () => void }) {
+export default function ResumeParsing({ onNavigate, onAccept, onInvalidate }: { onNavigate: (module: ModuleId) => void; onAccept: (draft: ResumeDraft) => void; onInvalidate: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [document, setDocument] = useState<DocumentText | null>(null);
   const [resume, setResume] = useState<ResumeDraft | null>(null);
@@ -60,7 +62,7 @@ export default function ResumeParsing({ onNavigate, onAccept, onInvalidate }: { 
   function updateDates(dates: ResumeDraft["dates"]) { setResume(current => current ? { ...current, dates } : current); setAccepted(false); onInvalidate(); }
 
   return <main className="shell">
-    <header className="topbar"><div className="brand-mark">R</div><div className="brand-name">RADIX <span>TALENT MATCH</span></div><nav className="module-nav" aria-label="RADIX modules"><button className="nav-button" onClick={() => onNavigate("jd")}>JD Analytics</button><span className="nav-current" aria-current="page">Resume Parsing</span><button className="nav-button" onClick={() => onNavigate("profile")}>Profile Builder</button><button className="nav-button" onClick={() => onNavigate("matching")}>Skill Matching</button><button className="nav-button" onClick={() => onNavigate("talent")}>Talent Check</button></nav></header>
+    <ModuleNavigation active="resume" onNavigate={onNavigate} />
     <section className="hero"><div className="eyebrow">RESUME PARSING</div><h1>Review what’s stated.<br /><em>Keep every claim traceable.</em></h1><p>Extract editable resume details with evidence. Skill mentions do not establish proficiency, employability, readiness, or job fit.</p></section>
     <section className="panel" aria-labelledby="resume-upload-heading">
       <div className="eyebrow">STEP 1</div><h2 id="resume-upload-heading">Upload a resume</h2>

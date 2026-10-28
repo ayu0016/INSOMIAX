@@ -1,6 +1,6 @@
 # RADIX Talent Match — Integration Foundation
 
-This repository contains a FastAPI foundation with JD Analytics, Resume Parsing, Profile Builder, and Job Skill Matching. Company Talent Check remains blocked on verified staging schema and approved scoring policy.
+This repository contains a FastAPI foundation and a React application with a unified dashboard for JD Analytics, Resume Parsing, Profile Builder, Job Skill Matching, and Company Talent Check. Company Talent Check remains blocked on verified staging schema/data and approved scoring policy.
 
 The backend reads `staging_company_skill_levels` using a read-only PostgreSQL connection. Until the live schema is inspected and mapped, it returns schema-verification status only. It does not return raw rows, invent company or skill identifiers, or calculate readiness. Scoring remains disabled until an approved formula is documented.
 
@@ -63,11 +63,11 @@ The page calls `http://127.0.0.1:8000` by default; set the non-secret `VITE_API_
 - `POST /api/v1/jd-analytics/extract` accepts multipart form field `file` with PDF or DOCX bytes and returns extracted text.
 - `POST /api/v1/jd-analytics/analyze` accepts `{"text":"..."}` and returns deterministic, evidence-linked findings.
 
-The upload limit defaults to 10 MiB (`RADIX_JD_MAX_UPLOAD_BYTES`). Parsing is in memory; scanned PDFs need OCR, which is not included. `backend/app/jd_analytics/skill_vocabulary.json` is an explicitly illustrative baseline, not official RADIX vocabulary or aliases. The configuration format supports aliases, but the baseline seeds none; add only reviewed aliases in a configured vocabulary file via `RADIX_JD_SKILL_VOCAB_PATH`. Unknown terms stay unmatched. The module calculates no readiness or job-match scores. Anonymous access is allowed only when `RADIX_ENV=development` and `RADIX_JD_AUTH_MODE=local`; otherwise existing Supabase bearer-token validation applies. Never enable local auth mode in a deployed environment.
+The upload limit defaults to 10 MiB (`RADIX_JD_MAX_UPLOAD_BYTES`). Parsing is in memory; scanned PDFs need OCR, which is not included. `backend/app/jd_analytics/skill_vocabulary.json` is an explicitly illustrative baseline, not official RADIX vocabulary or aliases. The configuration format supports aliases, but the baseline seeds none; add only reviewed aliases in a configured vocabulary file via `RADIX_JD_SKILL_VOCAB_PATH`. Unknown terms stay unmatched. The module calculates no readiness or job-match scores. Anonymous access to only `POST /api/v1/jd-analytics/extract` and `POST /api/v1/jd-analytics/analyze` is allowed only when both `RADIX_ENV=development` and `RADIX_JD_AUTH_MODE=local`; otherwise Supabase bearer-token validation applies. Resume Parsing, Profile Builder, Job Skill Matching, and Company Talent Check remain protected, including when JD local mode is enabled. Never enable local auth mode in a deployed environment.
 
 ## Resume Parsing
 
-The Resume Parsing page reuses the same in-memory PDF/DOCX extraction, upload size/type checks, API origin, local-only authentication switch, and configured skill vocabulary. The frontend supports editable resume text and editable/removable candidate details, education, experience, internships, projects, identified dates, skills, and certifications. “Accept” only marks the reviewed extraction in the current browser session; this phase does not save candidate profiles or resume content.
+The Resume Parsing page reuses the in-memory PDF/DOCX extraction, upload size/type checks, API origin, and configured skill vocabulary. Its endpoints require Supabase authentication; the local anonymous exception applies only to the two JD Analytics routes. The frontend supports editable resume text and editable/removable candidate details, education, experience, internships, projects, identified dates, skills, and certifications. “Accept” only marks the reviewed extraction in the current browser session; this phase does not save candidate profiles or resume content.
 
 - `POST /api/v1/resume-parsing/extract` accepts multipart form field `file` with a PDF or DOCX and returns extracted text.
 - `POST /api/v1/resume-parsing/parse` accepts `{"text":"...","source_file":"..."}` and returns a draft `source_type: resume` extraction.
@@ -76,11 +76,11 @@ Name, email, phone, section content, and dates are identified with deterministic
 
 ## Profile Builder
 
-Profile Builder works without Supabase credentials when the documented local development auth mode is enabled. It can start with a blank profile or prefill from an accepted Resume Parsing draft in the same browser session. It preserves resume evidence and source labels, marks later edits, and validates a stateless preview through the backend. Profile state stays in React memory while switching modules; refreshing or closing the page clears it. The accept action is a session-only review state and does not write to Supabase, local storage, or a server-side store. No migration or candidate-profile persistence is implemented.
+Profile Builder can start with a blank profile or prefill from an accepted Resume Parsing draft in the same browser session. It preserves resume evidence and source labels, marks later edits, and validates a stateless preview through the backend. The preview endpoint requires Supabase authentication; JD local mode does not apply. Profile state stays in React memory while switching modules; refreshing or closing the page clears it. The accept action is a session-only review state and does not write to Supabase, local storage, or a server-side store. No migration or candidate-profile persistence is implemented.
 
 - `POST /api/v1/profiles/preview` accepts a typed candidate profile and returns the validated profile, missing-field list, and evidence/date/proficiency warnings. It never persists the request.
 
-Nested education, work, internship, project, certification, hackathon, preferred-role, and skill entries retain `resume` or `manual` provenance; edits are marked separately. Skills may have an optional user-reported proficiency, but resume mentions do not fill it and no readiness/employability/job-match scores are calculated. Dates remain text as supplied; missing dates generate warnings rather than inferred values. Keep phone optional and add only data needed for the candidate profile. Preview validation uses the same API errors and local/Supabase authentication behavior as the other modules.
+Nested education, work, internship, project, certification, hackathon, preferred-role, and skill entries retain `resume` or `manual` provenance; edits are marked separately. Skills may have an optional user-reported proficiency, but resume mentions do not fill it and no readiness/employability/job-match scores are calculated. Dates remain text as supplied; missing dates generate warnings rather than inferred values. Keep phone optional and add only data needed for the candidate profile. Preview validation uses the standard API error envelope and requires Supabase authentication; the JD-only local anonymous setting does not apply.
 
 ## Job Skill Matching
 
@@ -106,6 +106,19 @@ The Company Talent Check page calls the protected source-inspection endpoint and
 The actual Supabase table `staging_company_skill_levels` is the authoritative source under the Phase 7 instruction. The Phase 1 `company_benchmarks` migration table is not used as a replacement, and the missing `talent_check_company_skillsets.json` is not required. Never infer source column names, target company IDs, levels, category mapping, or completeness from the table name. The current `GET /api/v1/talent-check/source` query is read-only and returns metadata only to authenticated callers; database errors are sanitized. The API has no Supabase sign-in UI yet, so this page clearly reports the need for a session rather than weakening route authentication.
 
 Readiness scoring remains disabled. Before implementing it, approve formula/version, category weights, level comparison and gap direction, behavior for missing benchmark categories and candidate proficiency, treatment of `OTHER`, critical-gap rules, and rounding. No equal-weight assumption or zero substitution is made.
+
+## Unified workflow and persistence boundaries
+
+The dashboard is the application home and offers direct entry to every module. No module is required before opening another. It shows the accepted job analyses, accepted resume draft, and accepted candidate profiles available in the current React session, plus the next action when Job Skill Matching lacks either input.
+
+- **JD Analytics → Job Skill Matching:** review and accept a JD analysis. The accepted typed snapshot can then be selected in Skill Matching.
+- **Resume Parsing → Profile Builder:** accept a reviewed resume draft, open Profile Builder, and choose the prefill action. Resume parsing is optional; a profile can be started manually.
+- **Profile Builder → Job Skill Matching:** validate and accept a candidate profile, then select it with an accepted JD in Skill Matching. The matching page shows both selected artifact labels and links back to their source modules for edits.
+- **Company Talent Check:** independently accessible from the dashboard/navigation. It checks backend configuration and source status but does not show unverified company data.
+
+Accepted artifacts and module drafts live only in root/component React memory. Navigation keeps module components mounted so draft state and accepted artifacts remain available until the page is refreshed or closed. No browser storage or durable profile/JD persistence is used. The APIs for extraction, profile preview, and job matching process requests without saving them. The staging metadata endpoint is read-only; no Talent Check result is stored.
+
+The frontend does not yet implement Supabase sign-in/session handling. In explicitly configured local development (`RADIX_ENV=development` and `RADIX_JD_AUTH_MODE=local`), only the JD extraction and analysis routes accept anonymous requests. Resume Parsing, Profile Builder preview, Job Skill Matching, and Talent Check continue to require Supabase auth; frontend requests do not yet attach bearer tokens, so those protected flows need auth UI/session integration. Talent Check also needs verified source mapping. Do not broaden the local exception or disable API auth to work around these limitations.
 
 The PostgreSQL repository forces read-only transactions and uses parameterized metadata queries plus safely quoted discovered identifiers. It never logs a DSN or returns driver exception text.
 

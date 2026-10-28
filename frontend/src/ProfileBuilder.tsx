@@ -1,6 +1,8 @@
 import { useState } from "react";
 import type { ResumeDraft } from "./ResumeParsing";
 import type { CandidateProfile as Profile, ProfileEntry as Entry, ProfileField, ProfileSkill as Skill, ProfileSource } from "./contracts";
+import ModuleNavigation from "./ModuleNavigation";
+import type { ModuleId } from "./contracts";
 
 type Preview = { profile: Profile; missing_fields: string[]; warnings: string[]; persistence_available: false; scores_available: false };
 type Source = ProfileSource;
@@ -13,7 +15,7 @@ function fromResume(draft: ResumeDraft): Profile {
   return { name: contact(draft.candidate_name), email: contact(draft.email), phone: contact(draft.phone), education: entries(draft.education), work_experience: entries(draft.work_experience), internships: entries(draft.internships), projects: entries(draft.projects), certifications: entries(draft.certifications), skills: draft.skills.map(skill => ({ skill_name: skill.skill_name, category_code: skill.category_code, source: "resume", edited_by_user: false, evidence: skill.evidence, confidence: skill.confidence, canonical_skill: skill.canonical_skill, source_section: skill.source_section, evidence_kind: skill.evidence_kind, proficiency_level: null, proficiency_status: "not_assessed" })), hackathons: [], preferred_roles: [], source_file: draft.source_file };
 }
 
-export default function ProfileBuilder({ resumeDraft, onNavigate, onAccept }: { resumeDraft: ResumeDraft | null; onNavigate: (module: "jd" | "resume" | "matching" | "talent") => void; onAccept: (profile: Profile) => void }) {
+export default function ProfileBuilder({ resumeDraft, onNavigate, onAccept }: { resumeDraft: ResumeDraft | null; onNavigate: (module: ModuleId) => void; onAccept: (profile: Profile) => void }) {
   const [profile, setProfile] = useState<Profile>(emptyProfile);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
@@ -56,7 +58,7 @@ export default function ProfileBuilder({ resumeDraft, onNavigate, onAccept }: { 
   }
 
   return <main className="shell">
-    <header className="topbar"><div className="brand-mark">R</div><div className="brand-name">RADIX <span>TALENT MATCH</span></div><nav className="module-nav" aria-label="RADIX modules"><button className="nav-button" onClick={() => onNavigate("jd")}>JD Analytics</button><button className="nav-button" onClick={() => onNavigate("resume")}>Resume Parsing</button><span className="nav-current" aria-current="page">Profile Builder</span><button className="nav-button" onClick={() => onNavigate("matching")}>Skill Matching</button><button className="nav-button" onClick={() => onNavigate("talent")}>Talent Check</button></nav></header>
+    <ModuleNavigation active="profile" onNavigate={onNavigate} />
     <section className="hero"><div className="eyebrow">PROFILE BUILDER</div><h1>Build your profile.<br /><em>Keep your sources clear.</em></h1><p>Start manually or prefill from an accepted resume draft. Your edits and preview remain in this browser session; no profile is saved.</p></section>
     <section className="panel"><div className="card-heading"><div><div className="eyebrow">CANDIDATE PROFILE</div><h2>Contact details</h2></div>{resumeDraft ? <button className="secondary-button" onClick={prefill}>Prefill from accepted resume</button> : <span className="hint">No accepted resume draft in this session</span>}</div>
       <div className="contact-grid">{(["name", "email", "phone"] as const).map(key => <label className="field-label" key={key}>{key === "name" ? "Name" : key === "email" ? "Email" : "Phone"}<input type={key === "email" ? "email" : "text"} value={profile[key]?.value || ""} placeholder="Not provided" onChange={event => setContact(key, event.target.value)} />{profile[key]?.source && <small>Source: {profile[key]?.source === "resume" ? "Resume extraction" : "Manual entry"}</small>}{profile[key]?.evidence && <blockquote>{profile[key]?.evidence}</blockquote>}</label>)}</div>

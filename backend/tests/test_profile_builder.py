@@ -58,12 +58,11 @@ def test_manual_proficiency_must_be_explicitly_user_reported():
     assert profile.skills[0].proficiency_status == "user_reported"
 
 
-def test_profile_preview_api_requires_local_mode_and_returns_validation_error_envelope(monkeypatch):
+def test_profile_preview_api_returns_validation_error_envelope_for_authenticated_user(client, monkeypatch):
     monkeypatch.setenv("RADIX_ENV", "development")
     monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
-    with TestClient(app) as client:
-        valid = client.post("/api/v1/profiles/preview", json=example_profile())
-        invalid = client.post("/api/v1/profiles/preview", json=example_profile() | {"extra": True})
+    valid = client.post("/api/v1/profiles/preview", json=example_profile())
+    invalid = client.post("/api/v1/profiles/preview", json=example_profile() | {"extra": True})
     assert valid.status_code == 200
     assert valid.json()["profile"]["name"]["value"] == "Asha Verma"
     assert valid.json()["profile"]["skills"][0]["evidence"] == "Built Python services"
@@ -73,8 +72,8 @@ def test_profile_preview_api_requires_local_mode_and_returns_validation_error_en
     assert "request_id" in invalid.json()["error"]
 
 
-def test_profile_preview_keeps_supabase_auth_default_outside_local_mode(monkeypatch):
-    monkeypatch.setenv("RADIX_ENV", "production")
+def test_profile_preview_requires_supabase_auth_even_in_jd_local_mode(monkeypatch):
+    monkeypatch.setenv("RADIX_ENV", "development")
     monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
     with TestClient(app) as client:
         response = client.post("/api/v1/profiles/preview", json=example_profile())

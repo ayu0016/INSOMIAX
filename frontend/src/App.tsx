@@ -3,7 +3,9 @@ import ResumeParsing, { type ResumeDraft } from "./ResumeParsing";
 import ProfileBuilder from "./ProfileBuilder";
 import JobSkillMatching from "./JobSkillMatching";
 import CompanyTalentCheck from "./CompanyTalentCheck";
-import type { AcceptedArtifact, CandidateProfile, EvidenceText, JDAnalysisResult, SkillEvidence } from "./contracts";
+import Dashboard from "./Dashboard";
+import ModuleNavigation from "./ModuleNavigation";
+import type { AcceptedArtifact, CandidateProfile, EvidenceText, JDAnalysisResult, ModuleId, SkillEvidence } from "./contracts";
 type Extracted = { filename: string; text: string; character_count: number };
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
@@ -14,7 +16,7 @@ async function apiError(response: Response): Promise<Error> {
 }
 
 export default function App() {
-  const [activeModule, setActiveModule] = useState<"jd" | "resume" | "profile" | "matching" | "talent">("jd");
+  const [activeModule, setActiveModule] = useState<ModuleId>("dashboard");
   const [acceptedResume, setAcceptedResume] = useState<ResumeDraft | null>(null);
   const [acceptedJds, setAcceptedJds] = useState<AcceptedArtifact<JDAnalysisResult>[]>([]);
   const [acceptedProfiles, setAcceptedProfiles] = useState<AcceptedArtifact<CandidateProfile>[]>([]);
@@ -84,8 +86,9 @@ export default function App() {
   }
 
   return <>
+  <div hidden={activeModule !== "dashboard"}><Dashboard onNavigate={setActiveModule} acceptedResume={acceptedResume !== null} acceptedJds={acceptedJds} acceptedProfiles={acceptedProfiles} /></div>
   <div hidden={activeModule !== "jd"}><main className="shell">
-    <header className="topbar"><div className="brand-mark">R</div><div className="brand-name">RADIX <span>TALENT MATCH</span></div><nav className="module-nav" aria-label="RADIX modules"><span className="nav-current" aria-current="page">JD Analytics</span><button className="nav-button" onClick={() => setActiveModule("resume")}>Resume Parsing</button><button className="nav-button" onClick={() => setActiveModule("profile")}>Profile Builder</button><button className="nav-button" onClick={() => setActiveModule("matching")}>Skill Matching</button><button className="nav-button" onClick={() => setActiveModule("talent")}>Talent Check</button></nav></header>
+    <ModuleNavigation active="jd" onNavigate={setActiveModule} />
     <section className="hero"><div className="eyebrow">JOB DESCRIPTION ANALYTICS</div><h1>Understand the role.<br /><em>Keep evidence in view.</em></h1><p>Extract a job description, review its text, then inspect and correct the deterministic analysis. This does not assess candidate readiness or match scores.</p></section>
 
     <section className="panel" aria-labelledby="upload-heading">

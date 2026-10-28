@@ -152,6 +152,39 @@ def test_api_extract_and_analyze_flow_and_validation_errors():
         assert malformed.json()["error"]["code"] == "UNREADABLE_DOCUMENT"
 
 
+def test_both_jd_endpoints_allow_anonymous_requests_in_explicit_local_mode(monkeypatch):
+    monkeypatch.setenv("RADIX_ENV", "development")
+    monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
+    with TestClient(app) as client:
+        extracted = client.post("/api/v1/jd-analytics/extract", files={"file": ("jd.docx", make_docx("Job Title: Analyst\nRequired Python."), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
+        analyzed = client.post("/api/v1/jd-analytics/analyze", json={"text": "Job Title: Analyst\nRequired Python."})
+    assert extracted.status_code == 200
+    assert analyzed.status_code == 200
+
+
+@pytest.mark.parametrize(("environment", "auth_mode"), [
+    (None, None),
+    ("development", None),
+    (None, "local"),
+    ("production", "local"),
+])
+def test_jd_endpoints_require_supabase_unless_both_local_settings_are_explicit(monkeypatch, environment, auth_mode):
+    if environment is None:
+        monkeypatch.delenv("RADIX_ENV", raising=False)
+    else:
+        monkeypatch.setenv("RADIX_ENV", environment)
+    if auth_mode is None:
+        monkeypatch.delenv("RADIX_JD_AUTH_MODE", raising=False)
+    else:
+        monkeypatch.setenv("RADIX_JD_AUTH_MODE", auth_mode)
+
+    with TestClient(app) as client:
+        extracted = client.post("/api/v1/jd-analytics/extract", files={"file": ("jd.docx", make_docx("Job Title: Analyst"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
+        analyzed = client.post("/api/v1/jd-analytics/analyze", json={"text": "Job Title: Analyst"})
+    assert extracted.status_code == analyzed.status_code == 401
+    assert extracted.json()["error"]["code"] == analyzed.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+
+
 def test_api_enforces_configured_upload_limit(monkeypatch):
     monkeypatch.setenv("RADIX_JD_MAX_UPLOAD_BYTES", "10")
     with TestClient(app) as client:
