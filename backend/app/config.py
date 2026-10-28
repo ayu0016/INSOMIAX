@@ -4,10 +4,22 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(PROJECT_ROOT / ".env")
+ENV_FILE = PROJECT_ROOT / ".env"
+_PROCESS_DSN_CONFIGURED = bool(os.getenv("RADIX_SUPABASE_READONLY_DSN", "").strip())
+_DOTENV_DSN_CONFIGURED = bool((dotenv_values(ENV_FILE).get("RADIX_SUPABASE_READONLY_DSN") or "").strip())
+load_dotenv(ENV_FILE)
+
+
+def database_dsn_source() -> str:
+    """Return safe provenance metadata without returning the DSN itself."""
+    if _PROCESS_DSN_CONFIGURED:
+        return "process_environment"
+    if _DOTENV_DSN_CONFIGURED:
+        return "repository_root_dotenv"
+    return "none"
 
 
 def _configured(value: str | None) -> str | None:

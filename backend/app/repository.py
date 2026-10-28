@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 
 import psycopg
 from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict
 from psycopg.rows import dict_row
 
 from .config import Settings, get_settings
@@ -12,9 +13,47 @@ from .errors import (
     DatabaseUnavailable,
     SourceSchemaAmbiguous,
     SourceTableNotFound,
+    StagingDiagnosticFailure,
 )
 
 SOURCE_TABLE = "staging_company_skill_levels"
+
+_DIAGNOSTIC_GUIDANCE = {
+    "malformed_dsn": "Correct the PostgreSQL DSN syntax and verify it contains the intended host, port, database, and user.",
+    "dns_failure": "Verify the database hostname and DNS resolution from this machine.",
+    "network_failure": "Check network access, firewall rules, VPN, and the database endpoint/port.",
+    "tls_ssl_failure": "Check the provider's required SSL mode and certificate settings; keep TLS verification enabled.",
+    "authentication_failure": "Verify the dedicated read-only user's username/password and that the account can log in.",
+    "timeout": "Check network reachability and whether the database is accepting connections; retry after confirming the endpoint.",
+    "database_permission_failure": "Have the database owner review read-only catalog and source-table access for this role; do not broaden the role.",
+    "database_unavailable": "Check the database endpoint and network path, then retry the read-only diagnostic.",
+}
+
+
+def _diagnostic_failure_category(exc: psycopg.Error) -> str:
+    state = getattr(exc, "sqlstate", None) or ""
+    if isinstance(exc, psycopg.errors.InsufficientPrivilege) or state == "42501":
+        return "database_permission_failure"
+    safe_match_text = str(exc).lower()
+    if (
+        isinstance(exc, (psycopg.errors.InvalidPassword, psycopg.errors.InvalidAuthorizationSpecification))
+        or state.startswith("28")
+        or any(term in safe_match_text for term in ("password authentication failed", "authentication failed", "no password supplied"))
+    ):
+        return "authentication_failure"
+    if isinstance(exc, psycopg.ProgrammingError):
+        return "malformed_dsn"
+
+    # Inspect driver text only to classify it. It is never included in output.
+    if any(term in safe_match_text for term in ("ssl", "tls", "certificate", "cert verify")):
+        return "tls_ssl_failure"
+    if any(term in safe_match_text for term in ("timeout", "timed out", "deadline")) or state == "57014":
+        return "timeout"
+    if any(term in safe_match_text for term in ("could not translate host name", "name or service not known", "temporary failure in name resolution", "nodename nor servname", "getaddrinfo failed", "no such host")):
+        return "dns_failure"
+    if state.startswith("08") or any(term in safe_match_text for term in ("connection refused", "network is unreachable", "no route to host", "server closed the connection")):
+        return "network_failure"
+    return "database_unavailable"
 
 
 @dataclass(frozen=True)
@@ -244,6 +283,13 @@ class StagingCompetencyRepository:
             raise DatabaseConfigurationRequired()
 
         try:
+            conninfo_to_dict(dsn)
+        except (psycopg.ProgrammingError, ValueError, TypeError):
+            raise StagingDiagnosticFailure(
+                "malformed_dsn", _DIAGNOSTIC_GUIDANCE["malformed_dsn"]
+            ) from None
+
+        try:
             with psycopg.connect(
                 dsn,
                 connect_timeout=5,
@@ -398,9 +444,10 @@ class StagingCompetencyRepository:
                     )
         except (DatabaseConfigurationRequired, SourceSchemaAmbiguous, SourceTableNotFound):
             raise
-        except psycopg.Error:
+        except psycopg.Error as exc:
             # Driver exceptions may include DSNs, SQL, or database identifiers.
-            raise DatabaseUnavailable() from None
+            category = _diagnostic_failure_category(exc)
+            raise StagingDiagnosticFailure(category, _DIAGNOSTIC_GUIDANCE[category]) from None
 
 
 def get_repository() -> StagingCompetencyRepository:

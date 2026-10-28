@@ -44,6 +44,15 @@ class DatabaseUnavailable(RadixError):
         )
 
 
+class StagingDiagnosticFailure(Exception):
+    """Safe local-only diagnosis for PostgreSQL connection/catalog failures."""
+
+    def __init__(self, category: str, next_step: str) -> None:
+        self.category = category
+        self.next_step = next_step
+        super().__init__(f"{category}: {next_step}")
+
+
 class SourceTableNotFound(RadixError):
     def __init__(self) -> None:
         super().__init__(

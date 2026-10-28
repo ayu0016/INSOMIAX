@@ -6,7 +6,7 @@ import psycopg
 import pytest
 
 from app.config import Settings
-from app.errors import DatabaseConfigurationRequired, DatabaseUnavailable, SourceSchemaAmbiguous
+from app.errors import DatabaseConfigurationRequired, SourceSchemaAmbiguous, StagingDiagnosticFailure
 from app.repository import StagingCompetencyRepository
 
 
@@ -148,20 +148,45 @@ def test_direct_admin_membership_and_object_ownership_fail_read_only_assessment(
     assert result.read_only_candidate is False
 
 
-def test_catalog_permission_error_is_sanitized():
+def test_catalog_permission_error_has_safe_permission_guidance():
     connection = MagicMock()
     cursor = connection.cursor.return_value.__enter__.return_value
     cursor.execute.side_effect = [None, psycopg.errors.InsufficientPrivilege("dsn=private password=secret")]
     with patch("app.repository.psycopg.connect") as connect:
         connect.return_value.__enter__.return_value = connection
-        with pytest.raises(DatabaseUnavailable) as caught:
+        with pytest.raises(StagingDiagnosticFailure) as caught:
             repository().diagnose_access()
+    assert caught.value.category == "database_permission_failure"
+    assert "database owner" in caught.value.next_step
     assert "secret" not in str(caught.value)
     assert "dsn" not in str(caught.value).lower()
 
 
-def test_connection_error_is_sanitized():
-    with patch("app.repository.psycopg.connect", side_effect=psycopg.OperationalError("password=secret")):
-        with pytest.raises(DatabaseUnavailable) as caught:
+@pytest.mark.parametrize(("exception", "category"), [
+    (psycopg.OperationalError("could not translate host name 'secret-host'"), "dns_failure"),
+    (psycopg.OperationalError("getaddrinfo failed for secret-host"), "dns_failure"),
+    (psycopg.OperationalError("connection refused; password=secret"), "network_failure"),
+    (psycopg.OperationalError("SSL certificate verify failed; password=secret"), "tls_ssl_failure"),
+    (psycopg.OperationalError("connection timeout expired; password=secret"), "timeout"),
+    (psycopg.OperationalError("password authentication failed for user secret; password=secret"), "authentication_failure"),
+    (psycopg.OperationalError("password=secret"), "database_unavailable"),
+])
+def test_connection_error_category_and_guidance_are_sanitized(exception, category):
+    with patch("app.repository.psycopg.connect", side_effect=exception):
+        with pytest.raises(StagingDiagnosticFailure) as caught:
             repository().diagnose_access()
+    assert caught.value.category == category
+    assert caught.value.next_step
     assert "secret" not in str(caught.value)
+    assert "password=secret" not in str(caught.value).lower()
+
+
+def test_malformed_dsn_is_reported_before_connecting_without_echoing_it():
+    private_dsn = "not-a-valid-dsn password=secret"
+    with patch("app.repository.psycopg.connect") as connect:
+        with pytest.raises(StagingDiagnosticFailure) as caught:
+            repository(dsn=private_dsn).diagnose_access()
+    connect.assert_not_called()
+    assert caught.value.category == "malformed_dsn"
+    assert "secret" not in str(caught.value)
+    assert "password" not in str(caught.value).lower()
