@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CandidateProfile as Profile, ProfileEntry as Entry, ProfileField, ProfileSkill as Skill, ProfileSource, ResumeParseArtifact } from "./contracts";
 import ModuleNavigation from "./ModuleNavigation";
 import type { ModuleId } from "./contracts";
@@ -7,15 +7,13 @@ type Preview = { profile: Profile; missing_fields: string[]; warnings: string[];
 type Source = ProfileSource;
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
-function emptyProfile(): Profile { return { name: null, email: null, phone: null, education: [], work_experience: [], internships: [], projects: [], skills: [], certifications: [], hackathons: [], preferred_roles: [], source_file: null }; }
 function fromResume(draft: ResumeParseArtifact): Profile {
   const contact = (field: ResumeParseArtifact["candidate_name"]): ProfileField | null => field ? { value: field.value, evidence: field.evidence, source: "resume", edited_by_user: false } : null;
   const entries = (items: ResumeParseArtifact["education"]): Entry[] => items.map(item => ({ text: item.text, dates: item.dates, duration: item.duration, evidence: item.evidence, source_section: item.source_section, source: "resume", edited_by_user: false }));
   return { name: contact(draft.candidate_name), email: contact(draft.email), phone: contact(draft.phone), education: entries(draft.education), work_experience: entries(draft.work_experience), internships: entries(draft.internships), projects: entries(draft.projects), certifications: entries(draft.certifications), skills: draft.skills.map(skill => ({ skill_name: skill.skill_name, category_code: skill.category_code, source: "resume", edited_by_user: false, evidence: skill.evidence, confidence: skill.confidence, canonical_skill: skill.canonical_skill, source_section: skill.source_section, evidence_kind: skill.evidence_kind, proficiency_level: null, proficiency_status: "not_assessed" })), hackathons: [], preferred_roles: [], source_file: draft.source_file };
 }
 
-export default function ProfileBuilder({ resumeDraft, prefillRequest, onNavigate, onAccept }: { resumeDraft: ResumeParseArtifact | null; prefillRequest: number; onNavigate: (module: ModuleId) => void; onAccept: (profile: Profile) => void }) {
-  const [profile, setProfile] = useState<Profile>(emptyProfile);
+export default function ProfileBuilder({ resumeDraft, prefillRequest, profile, acceptedProfileCount, onDraftChange, onNavigate, onAccept }: { resumeDraft: ResumeParseArtifact | null; prefillRequest: number; profile: Profile; acceptedProfileCount: number; onDraftChange: (profile: Profile) => void; onNavigate: (module: ModuleId) => void; onAccept: (profile: Profile) => void }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,8 +21,9 @@ export default function ProfileBuilder({ resumeDraft, prefillRequest, onNavigate
   const [resumeWarnings, setResumeWarnings] = useState<string[]>([]);
   const [prefillConfirmation, setPrefillConfirmation] = useState(false);
   const [processedPrefillRequest, setProcessedPrefillRequest] = useState(0);
+  const emailInput = useRef<HTMLInputElement | null>(null);
 
-  function changeProfile(next: Profile) { setProfile(next); setPreview(null); setAccepted(false); setError(null); }
+  function changeProfile(next: Profile) { onDraftChange(next); setPreview(null); setAccepted(false); setError(null); }
   function prefill() { if (resumeDraft) { changeProfile(fromResume(resumeDraft)); setResumeWarnings(resumeDraft.missing_or_ambiguous); setPrefillConfirmation(false); } }
   function requestResumePrefill() {
     if (!resumeDraft) return;
@@ -51,6 +50,7 @@ export default function ProfileBuilder({ resumeDraft, prefillRequest, onNavigate
   }
   function addSkill() { changeProfile({ ...profile, skills: [...profile.skills, { skill_name: "", category_code: "OTHER", source: "manual", edited_by_user: false, evidence: null, confidence: null, canonical_skill: null, source_section: null, evidence_kind: "manual", proficiency_level: null, proficiency_status: "not_assessed" }] }); }
   async function requestPreview() {
+    if (emailInput.current && !emailInput.current.reportValidity()) return;
     setBusy(true); setError(null); setAccepted(false);
     try {
       const response = await fetch(`${apiBase}/api/v1/profiles/preview`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(profile) });
@@ -71,11 +71,12 @@ export default function ProfileBuilder({ resumeDraft, prefillRequest, onNavigate
 
   return <main className="shell">
     <ModuleNavigation active="profile" onNavigate={onNavigate} />
-    <section className="hero"><div className="eyebrow">PROFILE BUILDER</div><h1>Build your profile.<br /><em>Keep your sources clear.</em></h1><p>Start manually or prefill from an accepted resume draft. Your edits and preview remain in this browser session; no profile is saved.</p></section>
-    <section className="panel"><div className="card-heading"><div><div className="eyebrow">CANDIDATE PROFILE</div><h2>Contact details</h2></div>{resumeDraft ? <button className="secondary-button" onClick={requestResumePrefill}>Prefill from accepted resume</button> : <span className="hint">No accepted resume draft in this session; you can build this profile manually.</span>}</div>
-      {resumeDraft && <div className="notice">Using the accepted parsed-resume artifact in this session. Fields absent from that artifact stay blank; editing this profile does not change the parsed source.</div>}
+    <section className="hero"><div className="eyebrow">PROFILE BUILDER</div><h1>Build your profile.<br /><em>Keep your sources clear.</em></h1><p>Start manually or prefill from an accepted resume draft. The editable draft is saved in this browser only; profile preview remains stateless and no profile is saved on the server.</p></section>
+    <section className="panel"><div className="card-heading"><div><div className="eyebrow">CANDIDATE PROFILE</div><h2>Contact details</h2></div>{resumeDraft ? <button className="secondary-button" onClick={requestResumePrefill}>Prefill from accepted resume</button> : <span className="hint">No accepted resume draft is saved in this browser; you can build this profile manually.</span>}</div>
+      {acceptedProfileCount > 0 && <div className="notice">{acceptedProfileCount} accepted profile snapshot{acceptedProfileCount === 1 ? " is" : "s are"} available to Job Skill Matching. Changes here affect only this editable draft; preview and accept again to create a new snapshot for matching.</div>}
+      {resumeDraft && <div className="notice">Using the accepted parsed-resume artifact saved in this browser. Fields absent from that artifact stay blank; editing this profile does not change the parsed source.</div>}
       {prefillConfirmation && <div className="notice notice-error" role="alert"><strong>This profile already has content.</strong> Replace the current editable draft with the accepted resume prefill? The accepted resume artifact itself will remain unchanged.<div className="builder-actions"><button onClick={prefill}>Replace draft with resume details</button><button className="secondary-button" onClick={() => setPrefillConfirmation(false)}>Keep current draft</button></div></div>}
-      <div className="contact-grid">{(["name", "email", "phone"] as const).map(key => <label className="field-label" key={key}>{key === "name" ? "Name" : key === "email" ? "Email" : "Phone"}<input type={key === "email" ? "email" : "text"} value={profile[key]?.value || ""} placeholder="Not provided" onChange={event => setContact(key, event.target.value)} />{profile[key]?.source && <small>Source: {profile[key]?.source === "resume" ? "Resume extraction" : "Manual entry"}</small>}{profile[key]?.evidence && <blockquote>{profile[key]?.evidence}</blockquote>}</label>)}</div>
+      <div className="contact-grid">{(["name", "email", "phone"] as const).map(key => <label className="field-label" key={key}>{key === "name" ? "Name" : key === "email" ? "Email" : "Phone"}<input ref={key === "email" ? emailInput : undefined} type={key === "email" ? "email" : "text"} maxLength={255} value={profile[key]?.value || ""} placeholder="Not provided" onChange={event => setContact(key, event.target.value)} />{profile[key]?.source && <small>Source: {profile[key]?.source === "resume" ? "Resume extraction" : "Manual entry"}</small>}{profile[key]?.evidence && <blockquote>{profile[key]?.evidence}</blockquote>}</label>)}</div>
       {profile.source_file && <p className="hint">Prefilled from {profile.source_file}; the resume file itself was not retained.</p>}{resumeWarnings.length > 0 && <div className="notice"><strong>Resume parser marked these fields missing or ambiguous:</strong> {resumeWarnings.join(", ")}. Blank profile fields remain unknown until you provide them.</div>}
     </section>
     <section className="panel"><h2>Profile sections</h2>
@@ -93,9 +94,9 @@ export default function ProfileBuilder({ resumeDraft, prefillRequest, onNavigate
     {preview && <section className="panel" aria-labelledby="profile-preview-heading"><div className="eyebrow">REVIEW</div><h2 id="profile-preview-heading">Profile preview</h2>
       {preview.missing_fields.length > 0 && <div className="notice"><strong>Missing fields:</strong> {preview.missing_fields.join(", ")}</div>}{preview.warnings.map((warning, index) => <div className="notice" key={index}>{warning}</div>)}
       <ProfileSummary profile={preview.profile} />
-      <button className="accept-button" disabled={accepted} onClick={() => { setAccepted(true); onAccept(preview.profile); }}>{accepted ? "Profile accepted for this session" : "Accept reviewed profile"}</button>{accepted && <div className="success workflow-next-step" role="status"><p>Accepted in this browser session only. No permanent save was performed.</p><button onClick={() => onNavigate("matching")}>Continue to Job Skill Matching</button></div>}
+      <button className="accept-button" disabled={accepted} onClick={() => { setAccepted(true); onAccept(preview.profile); }}>{accepted ? "Profile accepted locally" : "Accept reviewed profile"}</button>{accepted && <div className="success workflow-next-step" role="status"><p>Accepted in this browser only. No server-side profile was created.</p><button onClick={() => onNavigate("matching")}>Continue to Job Skill Matching</button></div>}
     </section>}
-    <footer><span>RADIX TALENT MATCH</span><span>Session-only profile · No scores or permanent save</span></footer>
+    <footer><span>RADIX TALENT MATCH</span><span>Browser-local profile · No scores or server save</span></footer>
   </main>;
 }
 

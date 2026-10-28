@@ -67,7 +67,7 @@ The upload limit defaults to 10 MiB (`RADIX_JD_MAX_UPLOAD_BYTES`). Parsing is in
 
 ## Resume Parsing
 
-The Resume Parsing page reuses the in-memory PDF/DOCX extraction, upload size/type checks, API origin, and configured skill vocabulary. Its endpoints are available anonymously only under the explicit local development settings above; otherwise Supabase authentication is required. The frontend supports editable resume text and editable/removable candidate details, education, experience, internships, projects, identified dates, skills, and certifications. After accepting the reviewed extraction, choose **Build Profile from Resume** to open Profile Builder and prefill the accepted typed artifact. The artifact remains a separate session snapshot; edits to the profile do not alter it. Resume text and parsed data are not saved permanently.
+The Resume Parsing page reuses the in-memory PDF/DOCX extraction, upload size/type checks, API origin, and configured skill vocabulary. Its endpoints are available anonymously only under the explicit local development settings above; otherwise Supabase authentication is required. The frontend supports editable resume text and editable/removable candidate details, education, experience, internships, projects, identified dates, skills, and certifications. After accepting the reviewed extraction, choose **Build Profile from Resume** to open Profile Builder and prefill the accepted typed artifact. The accepted artifact is stored separately in browser local storage; edits to the profile do not alter it. Uploaded files, extracted resume text, and unaccepted parse drafts are not stored by the persistence feature.
 
 - `POST /api/v1/resume-parsing/extract` accepts multipart form field `file` with a PDF or DOCX and returns extracted text.
 - `POST /api/v1/resume-parsing/parse` accepts `{"text":"...","source_file":"..."}` and returns a draft `source_type: resume` extraction.
@@ -76,7 +76,7 @@ Name, email, phone, section content, and dates are identified with deterministic
 
 ## Profile Builder
 
-Profile Builder can start with a blank profile or prefill from an accepted Resume Parsing draft in the same browser session. It preserves resume evidence and source labels, marks later edits, and validates a stateless preview through the backend. The preview endpoint follows the same explicit local development exception as the workflow routes; otherwise it requires Supabase authentication. Profile state stays in React memory while switching modules; refreshing or closing the page clears it. The accept action is a session-only review state and does not write to Supabase, local storage, or a server-side store. No migration or candidate-profile persistence is implemented.
+Profile Builder can start with a blank profile or prefill from an accepted Resume Parsing draft. It preserves resume evidence and source labels, marks later edits, and validates a stateless preview through the backend. The preview endpoint follows the same explicit local development exception as the workflow routes; otherwise it requires Supabase authentication. The editable draft and accepted profile snapshots are temporarily stored in versioned browser local storage for local development; no profile is written to Supabase or a server-side store. No migration or server-side candidate-profile persistence is implemented.
 
 - `POST /api/v1/profiles/preview` accepts a typed candidate profile and returns the validated profile, missing-field list, and evidence/date/proficiency warnings. It never persists the request.
 
@@ -84,7 +84,7 @@ Nested education, work, internship, project, certification, hackathon, preferred
 
 ## Job Skill Matching
 
-Job Skill Matching compares an accepted JD Analytics result with an accepted Profile Builder profile held in the current browser session. Use the Skill Matching page to select both artifacts and submit the comparison. The artifacts are sent to the API for stateless processing; they are not persisted. A refresh clears the selections and accepted artifacts.
+Job Skill Matching compares an accepted JD Analytics result with an accepted Profile Builder profile. The selected artifact IDs and typed comparison result are temporarily stored in browser local storage. The artifacts are sent to the API for stateless processing; the backend does not persist them.
 
 - `POST /api/v1/skill-matches` accepts `job_description` and `candidate_profile` objects using the JD Analytics and Profile Builder contracts. It returns separate `matched`, `partially_matched`, `missing`, and `needs_review` findings with requirement type, category, explanation, and source evidence.
 
@@ -109,14 +109,16 @@ Readiness scoring remains disabled. Before implementing it, approve formula/vers
 
 ## Unified workflow and persistence boundaries
 
-The dashboard is the application home and offers direct entry to every module. No module is required before opening another. It shows the accepted job analyses, accepted resume draft, and accepted candidate profiles available in the current React session, plus the next action when Job Skill Matching lacks either input.
+The dashboard is the application home and offers direct entry to every module. No module is required before opening another. Its workflow progress reflects accepted job analyses, the optional accepted resume draft, accepted candidate profiles, and whether a matching result exists in browser-local state. The next action changes as those artifacts become available. Company Talent Check is independent.
 
 - **JD Analytics → Job Skill Matching:** review and accept a JD analysis. The accepted typed snapshot can then be selected in Skill Matching.
 - **Resume Parsing → Profile Builder:** accept a reviewed resume draft and choose **Build Profile from Resume**. Profile Builder fills only fields present in the parsed artifact and keeps the source separate. Resume parsing is optional; a profile can be started manually. If a profile draft already contains data, Profile Builder asks before replacing it.
 - **Profile Builder → Job Skill Matching:** validate and accept a candidate profile, then select it with an accepted JD in Skill Matching. The matching page shows both selected artifact labels and links back to their source modules for edits.
 - **Company Talent Check:** independently accessible from the dashboard/navigation. It checks backend configuration and source status but does not show unverified company data.
 
-Accepted artifacts and module drafts live only in root/component React memory. Navigation keeps module components mounted so draft state and accepted artifacts remain available until the page is refreshed or closed. No browser storage or durable profile/JD persistence is used. The APIs for extraction, profile preview, and job matching process requests without saving them. The staging metadata endpoint is read-only; no Talent Check result is stored.
+Accepted JD analyses, the accepted parsed-resume artifact, the editable profile draft, accepted candidate profiles, and typed Job Skill Matching selections/results are saved under the single versioned browser key `radix-talent-match:local-state`. This is temporary local-development persistence: it does not sync between browsers or devices. The raw uploaded file, unaccepted extraction drafts, auth tokens, Supabase credentials, database connection strings, and Company Talent Check data are not stored by this feature. Extraction, profile preview, and matching APIs remain stateless; the staging metadata endpoint remains read-only.
+
+Anyone with access to the browser profile may be able to access locally stored workflow data. Use synthetic data during development and avoid storing sensitive real resumes. On the dashboard, **Clear local data** asks for confirmation and removes only keys owned by RADIX (`radix-talent-match:`); it does not clear unrelated website data. Invalid, corrupted, or unsupported stored versions are discarded with an in-app notice. If browser storage is blocked or full, the app continues for the current page session and displays a warning. This local storage feature does not change authentication, Supabase access, or server persistence.
 
 The frontend does not yet implement Supabase sign-in/session handling. In explicitly configured local development (`RADIX_ENV=development` and `RADIX_JD_AUTH_MODE=local`), JD Analytics, Resume Parsing, Profile Builder preview, and Job Skill Matching accept anonymous requests. Outside that mode, those routes require a valid Supabase bearer token; frontend requests do not yet attach tokens, so production use needs auth UI/session integration. Company Talent Check always requires Supabase auth and also needs verified source mapping. Do not enable local mode in production or disable authentication to work around these limitations.
 

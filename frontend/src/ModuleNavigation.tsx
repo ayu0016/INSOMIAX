@@ -5,8 +5,8 @@ const modules: { id: ModuleId; label: string }[] = [
   { id: "jd", label: "JD Analytics" },
   { id: "resume", label: "Resume Parsing" },
   { id: "profile", label: "Profile Builder" },
-  { id: "matching", label: "Skill Matching" },
-  { id: "talent", label: "Talent Check" },
+  { id: "matching", label: "Job Skill Matching" },
+  { id: "talent", label: "Company Talent Check" },
 ];
 
 export default function ModuleNavigation({ active, onNavigate }: { active: ModuleId; onNavigate: (module: ModuleId) => void }) {
@@ -16,7 +16,7 @@ export default function ModuleNavigation({ active, onNavigate }: { active: Modul
     <nav className="module-nav" aria-label="RADIX modules">
       {modules.map(module => module.id === active
         ? <span className="nav-current" aria-current="page" key={module.id}>{module.label}</span>
-        : <button className="nav-button" onClick={() => onNavigate(module.id)} key={module.id}>{module.label}</button>)}
+        : <button type="button" className="nav-button" onClick={() => onNavigate(module.id)} key={module.id}>{module.label}</button>)}
     </nav>
   </header>;
 }

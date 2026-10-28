@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ResumeParsing from "./ResumeParsing";
 import ProfileBuilder from "./ProfileBuilder";
 import JobSkillMatching from "./JobSkillMatching";
@@ -6,6 +6,7 @@ import CompanyTalentCheck from "./CompanyTalentCheck";
 import Dashboard from "./Dashboard";
 import ModuleNavigation from "./ModuleNavigation";
 import type { AcceptedArtifact, CandidateProfile, EvidenceText, JDAnalysisResult, ModuleId, ResumeParseArtifact, SkillEvidence } from "./contracts";
+import { clearRadixState, createInitialRadixState, emptyCandidateProfile, loadRadixState, saveRadixState, type MatchingSession } from "./localPersistence";
 type Extracted = { filename: string; text: string; character_count: number };
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
@@ -16,17 +17,41 @@ async function apiError(response: Response): Promise<Error> {
 }
 
 export default function App() {
+  const [loaded] = useState(loadRadixState);
+  const [restoreNotice, setRestoreNotice] = useState<string | null>(loaded.notice);
+  const [storageNotice, setStorageNotice] = useState<string | null>(null);
+  const [acceptedResume, setAcceptedResume] = useState<AcceptedArtifact<ResumeParseArtifact> | null>(loaded.state.acceptedResume);
+  const [acceptedJds, setAcceptedJds] = useState<AcceptedArtifact<JDAnalysisResult>[]>(loaded.state.acceptedJds);
+  const [acceptedProfiles, setAcceptedProfiles] = useState<AcceptedArtifact<CandidateProfile>[]>(loaded.state.acceptedProfiles);
+  const [profileDraft, setProfileDraft] = useState<CandidateProfile>(loaded.state.profileDraft);
+  const [matchingSession, setMatchingSession] = useState<MatchingSession>(loaded.state.matching);
+  const skipNextSave = useRef(false);
+  const [moduleResetKey, setModuleResetKey] = useState(0);
   const [activeModule, setActiveModule] = useState<ModuleId>("dashboard");
-  const [acceptedResume, setAcceptedResume] = useState<AcceptedArtifact<ResumeParseArtifact> | null>(null);
   const [profilePrefillRequest, setProfilePrefillRequest] = useState(0);
-  const [acceptedJds, setAcceptedJds] = useState<AcceptedArtifact<JDAnalysisResult>[]>([]);
-  const [acceptedProfiles, setAcceptedProfiles] = useState<AcceptedArtifact<CandidateProfile>[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [extracted, setExtracted] = useState<Extracted | null>(null);
   const [analysis, setAnalysis] = useState<JDAnalysisResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState(false);
+
+  useEffect(() => {
+    if (skipNextSave.current) { skipNextSave.current = false; return; }
+    setStorageNotice(saveRadixState({ acceptedJds, acceptedResume, profileDraft, acceptedProfiles, matching: matchingSession }));
+  }, [acceptedJds, acceptedResume, profileDraft, acceptedProfiles, matchingSession, moduleResetKey]);
+
+  function clearLocalData() {
+    skipNextSave.current = true;
+    const failure = clearRadixState();
+    const initial = createInitialRadixState();
+    setAcceptedJds(initial.acceptedJds); setAcceptedResume(initial.acceptedResume); setAcceptedProfiles(initial.acceptedProfiles);
+    setProfileDraft(emptyCandidateProfile()); setMatchingSession(initial.matching);
+    setFile(null); setExtracted(null); setAnalysis(null); setBusy(false); setError(null); setAccepted(false);
+    setProfilePrefillRequest(0); setModuleResetKey(key => key + 1); setActiveModule("dashboard");
+    setRestoreNotice(failure ? null : "RADIX local data was cleared from this browser.");
+    setStorageNotice(failure);
+  }
 
   async function upload() {
     if (!file) return;
@@ -98,7 +123,7 @@ export default function App() {
   }
 
   return <>
-  <div hidden={activeModule !== "dashboard"}><Dashboard onNavigate={setActiveModule} acceptedResume={acceptedResume !== null} acceptedJds={acceptedJds} acceptedProfiles={acceptedProfiles} /></div>
+  <div hidden={activeModule !== "dashboard"}><Dashboard onNavigate={setActiveModule} acceptedResume={acceptedResume !== null} acceptedJds={acceptedJds} acceptedProfiles={acceptedProfiles} matchingResult={matchingSession.result !== null} onClearLocalData={clearLocalData} /></div>
   <div hidden={activeModule !== "jd"}><main className="shell">
     <ModuleNavigation active="jd" onNavigate={setActiveModule} />
     <section className="hero"><div className="eyebrow">JOB DESCRIPTION ANALYTICS</div><h1>Understand the role.<br /><em>Keep evidence in view.</em></h1><p>Extract a job description, review its text, then inspect and correct the deterministic analysis. This does not assess candidate readiness or match scores.</p></section>
@@ -133,14 +158,15 @@ export default function App() {
       <EditableEvidence title="Education requirements" items={analysis.education_requirements} onEdit={(i, text) => updateEvidence("education_requirements", i, text)} />
       <EditableEvidence title="Responsibilities" items={analysis.responsibilities} onEdit={(i, text) => updateEvidence("responsibilities", i, text)} />
       <EditableEvidence title="Key qualifications" items={analysis.key_qualifications} onEdit={(i, text) => updateEvidence("key_qualifications", i, text)} />
-      <button className="accept-button" disabled={accepted} onClick={() => { setAccepted(true); acceptJobDescription(analysis); }}>{accepted ? "Analysis accepted" : "Accept reviewed analysis"}</button>{accepted && <p className="success" role="status">Accepted in this browser session. Nothing has been saved to a server.</p>}
+      <button className="accept-button" disabled={accepted} onClick={() => { setAccepted(true); acceptJobDescription(analysis); }}>{accepted ? "Analysis accepted" : "Accept reviewed analysis"}</button>{accepted && <div className="success workflow-next-step" role="status"><p>Accepted in this browser only. The saved snapshot stays separate from further edits to this draft.</p><button onClick={() => setActiveModule("matching")}>Continue to Job Skill Matching</button></div>}
     </section>}
     <footer><span>RADIX TALENT MATCH</span><span>Evidence linked · No fabricated scores</span></footer>
   </main></div>
-  <div hidden={activeModule !== "resume"}><ResumeParsing onNavigate={setActiveModule} onAccept={acceptResumeDraft} onInvalidate={() => setAcceptedResume(null)} onBuildProfile={buildProfileFromResume} /></div>
-  <div hidden={activeModule !== "profile"}><ProfileBuilder resumeDraft={acceptedResume?.data || null} prefillRequest={profilePrefillRequest} onNavigate={setActiveModule} onAccept={acceptCandidateProfile} /></div>
-  <div hidden={activeModule !== "matching"}><JobSkillMatching jobDescriptions={acceptedJds} candidateProfiles={acceptedProfiles} onNavigate={setActiveModule} /></div>
-  <div hidden={activeModule !== "talent"}><CompanyTalentCheck onNavigate={setActiveModule} /></div>
+  <div hidden={activeModule !== "resume"} key={`resume-${moduleResetKey}`}><ResumeParsing onNavigate={setActiveModule} onAccept={acceptResumeDraft} onInvalidate={() => setAcceptedResume(null)} onBuildProfile={buildProfileFromResume} /></div>
+  <div hidden={activeModule !== "profile"} key={`profile-${moduleResetKey}`}><ProfileBuilder resumeDraft={acceptedResume?.data || null} prefillRequest={profilePrefillRequest} profile={profileDraft} acceptedProfileCount={acceptedProfiles.length} onDraftChange={setProfileDraft} onNavigate={setActiveModule} onAccept={acceptCandidateProfile} /></div>
+  <div hidden={activeModule !== "matching"} key={`matching-${moduleResetKey}`}><JobSkillMatching jobDescriptions={acceptedJds} candidateProfiles={acceptedProfiles} session={matchingSession} onSessionChange={setMatchingSession} onNavigate={setActiveModule} /></div>
+  <div hidden={activeModule !== "talent"} key={`talent-${moduleResetKey}`}><CompanyTalentCheck onNavigate={setActiveModule} /></div>
+  {(restoreNotice || storageNotice) && <aside className={`storage-status ${storageNotice ? "notice-error" : ""}`} role={storageNotice ? "alert" : "status"}>{storageNotice || restoreNotice}<button className="text-button" onClick={() => { setRestoreNotice(null); setStorageNotice(null); }}>Dismiss</button></aside>}
   </>;
 }
 
