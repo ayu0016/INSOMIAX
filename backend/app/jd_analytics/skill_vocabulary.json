@@ -1,0 +1,25 @@
+{
+  "notice": "Illustrative application vocabulary only; not an official RADIX taxonomy or alias list. Replace/configure before relying on coverage.",
+  "skills": [
+    {"name": "Python", "category_code": "COD"},
+    {"name": "Java", "category_code": "COD"},
+    {"name": "JavaScript", "category_code": "COD"},
+    {"name": "TypeScript", "category_code": "COD"},
+    {"name": "C++", "category_code": "COD"},
+    {"name": "Data Structures", "category_code": "DSA"},
+    {"name": "Algorithms", "category_code": "DSA"},
+    {"name": "Object-Oriented Programming", "category_code": "OOD"},
+    {"name": "Communication", "category_code": "COMM"},
+    {"name": "Machine Learning", "category_code": "AI"},
+    {"name": "Artificial Intelligence", "category_code": "AI"},
+    {"name": "AWS", "category_code": "CLOUD"},
+    {"name": "Azure", "category_code": "CLOUD"},
+    {"name": "Google Cloud", "category_code": "CLOUD"},
+    {"name": "SQL", "category_code": "SQL"},
+    {"name": "PostgreSQL", "category_code": "SQL"},
+    {"name": "Software Engineering", "category_code": "SWE"},
+    {"name": "System Design", "category_code": "SYSD"},
+    {"name": "Networking", "category_code": "NETW"},
+    {"name": "Linux", "category_code": "OS"}
+  ]
+}
