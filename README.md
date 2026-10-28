@@ -95,15 +95,17 @@ No official alias map was available. The default `backend/app/job_skill_matching
 ## API foundation
 
 - `GET /api/v1/health` reports whether backend configuration is present without returning any configured values.
-- `GET /api/v1/talent-check/source` requires Supabase authentication, discovers the table's metadata, and reports row count and column metadata. It does not return table records.
+- `GET /api/v1/talent-check/source` requires Supabase authentication and returns a sanitized schema-review status only. It does not expose database object metadata or table records.
 - `GET /api/v1/talent-check/competencies` remains blocked with `SCHEMA_VERIFICATION_REQUIRED` until a verified mapping is implemented.
 - `POST /api/v1/talent-check/readiness` remains blocked with `SCORING_POLICY_UNAPPROVED` until an approved formula exists.
 
 ## Company Talent Check status
 
-The Company Talent Check page calls the protected source-inspection endpoint and presents authentication, configuration, source-unavailable, and schema-review states. Its current environment has neither a configured `RADIX_SUPABASE_READONLY_DSN` nor `SUPABASE_URL`/`SUPABASE_ANON_KEY`, so live source inspection and authenticated browser retrieval have not been verified. The page does not show company selectors or competencies until a validated company response contract can be built from the actual staging schema and records.
+The Company Talent Check page calls the protected source-inspection endpoint and presents authentication, configuration, source-unavailable, and schema-review states. Detailed schema and role diagnostics are available only through the local backend CLI described in the Phase 11 access guide, not through API responses. Its current environment has neither a configured `RADIX_SUPABASE_READONLY_DSN` nor `SUPABASE_URL`/`SUPABASE_ANON_KEY`, so live source inspection and authenticated browser retrieval have not been verified. The page does not show company selectors or competencies until a validated company response contract can be built from the actual staging schema and records.
 
 The actual Supabase table `staging_company_skill_levels` is the authoritative source under the Phase 7 instruction. The Phase 1 `company_benchmarks` migration table is not used as a replacement, and the missing `talent_check_company_skillsets.json` is not required. Never infer source column names, target company IDs, levels, category mapping, or completeness from the table name. The current `GET /api/v1/talent-check/source` query is read-only and returns metadata only to authenticated callers; database errors are sanitized. The API has no Supabase sign-in UI yet, so this page clearly reports the need for a session rather than weakening route authentication.
+
+For a local, read-only database role/schema/permission diagnostic, configure `RADIX_SUPABASE_READONLY_DSN` in the ignored backend `.env` and run `.\.venv\Scripts\python.exe backend\diagnose_staging_access.py` from the repository root. See [Phase 11 access verification](docs/phase-11-company-talent-access.md) for output interpretation and manual review steps. The diagnostic reads PostgreSQL catalogs only; it does not retrieve competency rows or verify column meaning.
 
 Readiness scoring remains disabled. Before implementing it, approve formula/version, category weights, level comparison and gap direction, behavior for missing benchmark categories and candidate proficiency, treatment of `OTHER`, critical-gap rules, and rounding. No equal-weight assumption or zero substitution is made.
 

@@ -110,5 +110,7 @@ def test_ambiguous_schema_requires_explicit_configuration():
         connect.return_value.__enter__.return_value = connection
         with pytest.raises(SourceSchemaAmbiguous) as caught:
             repository.inspect_source()
-    assert caught.value.details["available_schemas"] == ["private", "public"]
+    assert caught.value.details["required_environment_variable"] == "RADIX_STAGING_SCHEMA"
+    assert "private" not in str(caught.value.details)
+    assert "public" not in str(caught.value.details)
     assert len(cursor.execute.call_args_list) == 2

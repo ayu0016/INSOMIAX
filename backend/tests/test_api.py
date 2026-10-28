@@ -52,13 +52,9 @@ def test_source_endpoint_reports_unverified_schema_and_never_raw_rows(client):
     repository = Mock()
     repository.inspect_source.return_value.as_dict.return_value = {
         "status": "schema_verification_required",
-        "source_table": "staging_company_skill_levels",
-        "source_schema": "public",
-        "row_count": 4,
-        "columns": [],
         "competencies_available": False,
         "readiness_scoring_available": False,
-        "reason": "Verify mapping first.",
+        "reason": "Operator review is needed.",
     }
     from app.main import app
     app.dependency_overrides[get_repository] = lambda: repository
@@ -67,7 +63,11 @@ def test_source_endpoint_reports_unverified_schema_and_never_raw_rows(client):
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "SCHEMA_VERIFICATION_REQUIRED"
-    assert "records" not in response.json()
+    response_text = response.text.lower()
+    assert '"columns":' not in response_text
+    assert '"row_count":' not in response_text
+    assert '"source_schema":' not in response_text
+    assert "staging_company_skill_levels" not in response_text
 
 
 def test_competencies_endpoint_stays_blocked_until_staging_columns_are_verified(client):
@@ -97,6 +97,22 @@ def test_source_endpoint_sanitizes_database_unavailable_error(client):
     assert response.json()["error"]["code"] == "DATABASE_UNAVAILABLE"
     assert "password" not in response.text.lower()
     assert "dsn" not in response.text.lower()
+
+
+def test_source_endpoint_does_not_expose_ambiguous_schema_names(client):
+    from app.errors import SourceSchemaAmbiguous
+    repository = Mock()
+    repository.inspect_source.side_effect = SourceSchemaAmbiguous(["private_competencies", "legacy_archive"])
+    from app.main import app
+    app.dependency_overrides[get_repository] = lambda: repository
+
+    response = client.get("/api/v1/talent-check/source")
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "SOURCE_SCHEMA_AMBIGUOUS"
+    assert "private_competencies" not in response.text
+    assert "legacy_archive" not in response.text
+    assert "RADIX_STAGING_SCHEMA" in response.text
 
 
 def test_readiness_endpoint_never_calculates_without_approved_policy(client):

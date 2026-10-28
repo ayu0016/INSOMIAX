@@ -29,22 +29,8 @@ class HealthResponse(BaseModel):
     scoring_policy: Literal["unapproved"] = "unapproved"
 
 
-class ColumnMetadata(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    column_name: str
-    data_type: str
-    database_type: str
-    nullable: bool
-    ordinal_position: int
-
-
 class SourceInspectionResponse(BaseModel):
     status: Literal["schema_verification_required"]
-    source_table: str
-    source_schema: str
-    row_count: int
-    columns: list[ColumnMetadata]
     competencies_available: Literal[False] = False
     readiness_scoring_available: Literal[False] = False
     reason: str

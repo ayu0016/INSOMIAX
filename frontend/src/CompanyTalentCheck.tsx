@@ -4,23 +4,16 @@ import type { ModuleId } from "./contracts";
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
-type SourceMetadata = {
-  source_table: string;
-  source_schema: string;
-  row_count: number;
-  columns: { column_name: string; data_type: string; database_type: string; nullable: boolean; ordinal_position: number }[];
-};
-type ApiErrorPayload = { error?: { code?: string; message?: string; details?: { source?: SourceMetadata } } };
+type ApiErrorPayload = { error?: { code?: string; message?: string } };
 type HealthPayload = { database_configured?: boolean; auth_configured?: boolean };
 type ViewState = "idle" | "loading" | "authentication" | "configuration" | "unavailable" | "schema" | "error";
 
 export default function CompanyTalentCheck({ onNavigate }: { onNavigate: (module: ModuleId) => void }) {
   const [state, setState] = useState<ViewState>("idle");
   const [message, setMessage] = useState<string>("");
-  const [source, setSource] = useState<SourceMetadata | null>(null);
 
   async function inspectSource() {
-    setState("loading"); setMessage(""); setSource(null);
+    setState("loading"); setMessage("");
     try {
       const healthResponse = await fetch(`${apiBase}/api/v1/health`, { headers: { Accept: "application/json" } });
       if (!healthResponse.ok) throw new Error("The RADIX API health check failed.");
@@ -39,7 +32,6 @@ export default function CompanyTalentCheck({ onNavigate }: { onNavigate: (module
       }
       const code = payload.error?.code || "REQUEST_FAILED";
       setMessage(payload.error?.message || "The source could not be inspected.");
-      setSource(payload.error?.details?.source || null);
       if (code === "AUTHENTICATION_REQUIRED" || code === "INVALID_ACCESS_TOKEN") setState("authentication");
       else if (code === "AUTH_CONFIGURATION_REQUIRED" || code === "DATABASE_CONFIGURATION_REQUIRED") setState("configuration");
       else if (["DATABASE_UNAVAILABLE", "SOURCE_TABLE_NOT_FOUND", "AUTH_PROVIDER_UNAVAILABLE"].includes(code)) setState("unavailable");
@@ -63,7 +55,6 @@ export default function CompanyTalentCheck({ onNavigate }: { onNavigate: (module
       {state === "unavailable" && <div className="notice notice-error" role="alert"><strong>Source unavailable.</strong> {message}</div>}
       {state === "error" && <div className="notice notice-error" role="alert"><strong>Request failed.</strong> {message}</div>}
       {state === "schema" && <div className="notice" role="status"><strong>Competency data unavailable pending verification.</strong> {message}</div>}
-      {source && <div className="source-metadata"><h3>Safe source metadata</h3><p>Table: <code>{source.source_schema}.{source.source_table}</code> · rows: {source.row_count}</p><p>Column names and types only; no source records or competency values were returned.</p><ul>{source.columns.map(column => <li key={`${column.ordinal_position}-${column.column_name}`}><code>{column.column_name}</code> — {column.database_type}{column.nullable ? " (nullable)" : " (required)"}</li>)}</ul></div>}
       <div className="notice">No verified company list or competency mapping is currently available. The three target company identifiers and exact source columns must be verified before a selector can be populated. Readiness scoring is disabled because the formula, category weights, missing-proficiency behavior, and critical-gap policy are not approved.</div>
     </section>
     <footer><span>RADIX TALENT MATCH</span><span>Staging source only · No fabricated values or scores</span></footer>

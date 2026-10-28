@@ -49,17 +49,17 @@ class SourceTableNotFound(RadixError):
         super().__init__(
             503,
             "SOURCE_TABLE_NOT_FOUND",
-            "The configured database does not expose staging_company_skill_levels.",
+            "The configured staging source could not be resolved.",
         )
 
 
 class SourceSchemaAmbiguous(RadixError):
-    def __init__(self, schemas: list[str]) -> None:
+    def __init__(self, _schemas: list[str]) -> None:
         super().__init__(
             409,
             "SOURCE_SCHEMA_AMBIGUOUS",
-            "The source table exists in multiple schemas; set RADIX_STAGING_SCHEMA.",
-            {"available_schemas": schemas},
+            "The staging source schema is ambiguous; an operator must set RADIX_STAGING_SCHEMA.",
+            {"required_environment_variable": "RADIX_STAGING_SCHEMA"},
         )
 
 
