@@ -1,6 +1,5 @@
-import { useState } from "react";
-import type { ResumeDraft } from "./ResumeParsing";
-import type { CandidateProfile as Profile, ProfileEntry as Entry, ProfileField, ProfileSkill as Skill, ProfileSource } from "./contracts";
+import { useEffect, useState } from "react";
+import type { CandidateProfile as Profile, ProfileEntry as Entry, ProfileField, ProfileSkill as Skill, ProfileSource, ResumeParseArtifact } from "./contracts";
 import ModuleNavigation from "./ModuleNavigation";
 import type { ModuleId } from "./contracts";
 
@@ -9,22 +8,35 @@ type Source = ProfileSource;
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
 function emptyProfile(): Profile { return { name: null, email: null, phone: null, education: [], work_experience: [], internships: [], projects: [], skills: [], certifications: [], hackathons: [], preferred_roles: [], source_file: null }; }
-function fromResume(draft: ResumeDraft): Profile {
-  const contact = (field: ResumeDraft["candidate_name"]): ProfileField | null => field ? { value: field.value, evidence: field.evidence, source: "resume", edited_by_user: false } : null;
-  const entries = (items: ResumeDraft["education"]): Entry[] => items.map(item => ({ text: item.text, dates: item.dates, duration: item.duration, evidence: item.evidence, source_section: item.source_section, source: "resume", edited_by_user: false }));
+function fromResume(draft: ResumeParseArtifact): Profile {
+  const contact = (field: ResumeParseArtifact["candidate_name"]): ProfileField | null => field ? { value: field.value, evidence: field.evidence, source: "resume", edited_by_user: false } : null;
+  const entries = (items: ResumeParseArtifact["education"]): Entry[] => items.map(item => ({ text: item.text, dates: item.dates, duration: item.duration, evidence: item.evidence, source_section: item.source_section, source: "resume", edited_by_user: false }));
   return { name: contact(draft.candidate_name), email: contact(draft.email), phone: contact(draft.phone), education: entries(draft.education), work_experience: entries(draft.work_experience), internships: entries(draft.internships), projects: entries(draft.projects), certifications: entries(draft.certifications), skills: draft.skills.map(skill => ({ skill_name: skill.skill_name, category_code: skill.category_code, source: "resume", edited_by_user: false, evidence: skill.evidence, confidence: skill.confidence, canonical_skill: skill.canonical_skill, source_section: skill.source_section, evidence_kind: skill.evidence_kind, proficiency_level: null, proficiency_status: "not_assessed" })), hackathons: [], preferred_roles: [], source_file: draft.source_file };
 }
 
-export default function ProfileBuilder({ resumeDraft, onNavigate, onAccept }: { resumeDraft: ResumeDraft | null; onNavigate: (module: ModuleId) => void; onAccept: (profile: Profile) => void }) {
+export default function ProfileBuilder({ resumeDraft, prefillRequest, onNavigate, onAccept }: { resumeDraft: ResumeParseArtifact | null; prefillRequest: number; onNavigate: (module: ModuleId) => void; onAccept: (profile: Profile) => void }) {
   const [profile, setProfile] = useState<Profile>(emptyProfile);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [resumeWarnings, setResumeWarnings] = useState<string[]>([]);
+  const [prefillConfirmation, setPrefillConfirmation] = useState(false);
+  const [processedPrefillRequest, setProcessedPrefillRequest] = useState(0);
 
   function changeProfile(next: Profile) { setProfile(next); setPreview(null); setAccepted(false); setError(null); }
-  function prefill() { if (resumeDraft) { changeProfile(fromResume(resumeDraft)); setResumeWarnings(resumeDraft.missing_or_ambiguous); } }
+  function prefill() { if (resumeDraft) { changeProfile(fromResume(resumeDraft)); setResumeWarnings(resumeDraft.missing_or_ambiguous); setPrefillConfirmation(false); } }
+  function requestResumePrefill() {
+    if (!resumeDraft) return;
+    if (isProfileBlank(profile)) prefill();
+    else setPrefillConfirmation(true);
+  }
+
+  useEffect(() => {
+    if (prefillRequest <= processedPrefillRequest) return;
+    setProcessedPrefillRequest(prefillRequest);
+    requestResumePrefill();
+  }, [prefillRequest, processedPrefillRequest, resumeDraft, profile]);
   function addEntry(section: keyof Pick<Profile, "education" | "work_experience" | "internships" | "projects" | "certifications" | "hackathons" | "preferred_roles">) {
     changeProfile({ ...profile, [section]: [...profile[section], { text: "", source: "manual", edited_by_user: false, evidence: null, source_section: null, dates: null, duration: null }] } as Profile);
   }
@@ -60,9 +72,11 @@ export default function ProfileBuilder({ resumeDraft, onNavigate, onAccept }: { 
   return <main className="shell">
     <ModuleNavigation active="profile" onNavigate={onNavigate} />
     <section className="hero"><div className="eyebrow">PROFILE BUILDER</div><h1>Build your profile.<br /><em>Keep your sources clear.</em></h1><p>Start manually or prefill from an accepted resume draft. Your edits and preview remain in this browser session; no profile is saved.</p></section>
-    <section className="panel"><div className="card-heading"><div><div className="eyebrow">CANDIDATE PROFILE</div><h2>Contact details</h2></div>{resumeDraft ? <button className="secondary-button" onClick={prefill}>Prefill from accepted resume</button> : <span className="hint">No accepted resume draft in this session</span>}</div>
+    <section className="panel"><div className="card-heading"><div><div className="eyebrow">CANDIDATE PROFILE</div><h2>Contact details</h2></div>{resumeDraft ? <button className="secondary-button" onClick={requestResumePrefill}>Prefill from accepted resume</button> : <span className="hint">No accepted resume draft in this session; you can build this profile manually.</span>}</div>
+      {resumeDraft && <div className="notice">Using the accepted parsed-resume artifact in this session. Fields absent from that artifact stay blank; editing this profile does not change the parsed source.</div>}
+      {prefillConfirmation && <div className="notice notice-error" role="alert"><strong>This profile already has content.</strong> Replace the current editable draft with the accepted resume prefill? The accepted resume artifact itself will remain unchanged.<div className="builder-actions"><button onClick={prefill}>Replace draft with resume details</button><button className="secondary-button" onClick={() => setPrefillConfirmation(false)}>Keep current draft</button></div></div>}
       <div className="contact-grid">{(["name", "email", "phone"] as const).map(key => <label className="field-label" key={key}>{key === "name" ? "Name" : key === "email" ? "Email" : "Phone"}<input type={key === "email" ? "email" : "text"} value={profile[key]?.value || ""} placeholder="Not provided" onChange={event => setContact(key, event.target.value)} />{profile[key]?.source && <small>Source: {profile[key]?.source === "resume" ? "Resume extraction" : "Manual entry"}</small>}{profile[key]?.evidence && <blockquote>{profile[key]?.evidence}</blockquote>}</label>)}</div>
-      {profile.source_file && <p className="hint">Prefilled from {profile.source_file}; the resume file itself was not retained.</p>}{resumeWarnings.length > 0 && <div className="notice"><strong>Resume extraction warnings:</strong> {resumeWarnings.join(", ")}</div>}
+      {profile.source_file && <p className="hint">Prefilled from {profile.source_file}; the resume file itself was not retained.</p>}{resumeWarnings.length > 0 && <div className="notice"><strong>Resume parser marked these fields missing or ambiguous:</strong> {resumeWarnings.join(", ")}. Blank profile fields remain unknown until you provide them.</div>}
     </section>
     <section className="panel"><h2>Profile sections</h2>
       <ProfileEntries title="Education" section="education" profile={profile} onAdd={addEntry} onEdit={updateEntry} onRemove={removeEntry} />
@@ -79,13 +93,20 @@ export default function ProfileBuilder({ resumeDraft, onNavigate, onAccept }: { 
     {preview && <section className="panel" aria-labelledby="profile-preview-heading"><div className="eyebrow">REVIEW</div><h2 id="profile-preview-heading">Profile preview</h2>
       {preview.missing_fields.length > 0 && <div className="notice"><strong>Missing fields:</strong> {preview.missing_fields.join(", ")}</div>}{preview.warnings.map((warning, index) => <div className="notice" key={index}>{warning}</div>)}
       <ProfileSummary profile={preview.profile} />
-      <button className="accept-button" disabled={accepted} onClick={() => { setAccepted(true); onAccept(preview.profile); }}>{accepted ? "Profile accepted for this session" : "Accept reviewed profile"}</button>{accepted && <p className="success" role="status">Accepted in this browser session only. No permanent save was performed.</p>}
+      <button className="accept-button" disabled={accepted} onClick={() => { setAccepted(true); onAccept(preview.profile); }}>{accepted ? "Profile accepted for this session" : "Accept reviewed profile"}</button>{accepted && <div className="success workflow-next-step" role="status"><p>Accepted in this browser session only. No permanent save was performed.</p><button onClick={() => onNavigate("matching")}>Continue to Job Skill Matching</button></div>}
     </section>}
     <footer><span>RADIX TALENT MATCH</span><span>Session-only profile · No scores or permanent save</span></footer>
   </main>;
 }
 
 type Section = keyof Pick<Profile, "education" | "work_experience" | "internships" | "projects" | "certifications" | "hackathons" | "preferred_roles">;
+function isProfileBlank(profile: Profile): boolean {
+  return !profile.name && !profile.email && !profile.phone
+    && !profile.education.length && !profile.work_experience.length && !profile.internships.length
+    && !profile.projects.length && !profile.skills.length && !profile.certifications.length
+    && !profile.hackathons.length && !profile.preferred_roles.length;
+}
+
 function ProfileEntries({ title, section, profile, onAdd, onEdit, onRemove }: { title: string; section: Section; profile: Profile; onAdd: (section: Section) => void; onEdit: (section: Section, index: number, patch: Partial<Entry>) => void; onRemove: (section: Section, index: number) => void }) {
   return <section className="builder-section"><div className="builder-section-heading"><h3>{title}</h3><button className="secondary-button" onClick={() => onAdd(section)}>Add {title.toLowerCase()}</button></div>{profile[section].length === 0 && <p className="hint">No {title.toLowerCase()} added.</p>}{profile[section].map((entry, index) => <article className="resume-entry" key={`${section}-${index}`}><label className="field-label">Details<textarea value={entry.text} placeholder="Enter details" onChange={event => onEdit(section, index, { text: event.target.value })} /></label><div className="skill-edit-grid"><label className="field-label">Dates<input value={entry.dates || ""} placeholder="Unknown" onChange={event => onEdit(section, index, { dates: event.target.value || null })} /></label><label className="field-label">Duration<input value={entry.duration || ""} placeholder="Unknown" onChange={event => onEdit(section, index, { duration: event.target.value || null })} /></label></div><small>Source: {entry.source === "resume" ? `Resume extraction${entry.source_section ? ` · ${entry.source_section}` : ""}` : "Manual entry or edit"}</small>{entry.evidence && <blockquote>{entry.evidence}</blockquote>}<button className="remove-button" onClick={() => onRemove(section, index)}>Remove entry</button></article>)}</section>;
 }

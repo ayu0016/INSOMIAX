@@ -1,16 +1,10 @@
 import { useState } from "react";
 import ModuleNavigation from "./ModuleNavigation";
-import type { ModuleId } from "./contracts";
-
-type Contact = { value: string; evidence: string } | null;
-type Entry = { text: string; evidence: string; source_section: string; dates: string | null; duration: string | null };
-type Skill = { skill_name: string; canonical_skill: string | null; category_code: string; evidence: string; confidence: string; source_section: string; evidence_kind: "explicit" | "inferred"; proficiency_level: number | null; proficiency_status: "not_assessed" };
-export type ResumeDraft = {
-  source_file: string | null; candidate_name: Contact; email: Contact; phone: Contact;
-  education: Entry[]; work_experience: Entry[]; internships: Entry[]; projects: Entry[];
-  skills: Skill[]; certifications: Entry[]; dates: { value: string; evidence: string; source_section: string }[];
-  missing_or_ambiguous: string[]; proficiency_assessed: false; scores_available: false;
-};
+import type { ModuleId, ResumeParseArtifact, ResumeSkill } from "./contracts";
+export type ResumeDraft = ResumeParseArtifact;
+type Contact = NonNullable<ResumeDraft["candidate_name"]> | null;
+type Entry = ResumeDraft["education"][number];
+type Skill = ResumeSkill;
 type DocumentText = { filename: string; text: string; character_count: number };
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
@@ -19,7 +13,7 @@ async function getError(response: Response): Promise<Error> {
   return new Error(body?.error?.message || "The request failed. Check the backend and try again.");
 }
 
-export default function ResumeParsing({ onNavigate, onAccept, onInvalidate }: { onNavigate: (module: ModuleId) => void; onAccept: (draft: ResumeDraft) => void; onInvalidate: () => void }) {
+export default function ResumeParsing({ onNavigate, onAccept, onInvalidate, onBuildProfile }: { onNavigate: (module: ModuleId) => void; onAccept: (draft: ResumeDraft) => void; onInvalidate: () => void; onBuildProfile: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [document, setDocument] = useState<DocumentText | null>(null);
   const [resume, setResume] = useState<ResumeDraft | null>(null);
@@ -83,7 +77,7 @@ export default function ResumeParsing({ onNavigate, onAccept, onInvalidate }: { 
       <section className="evidence-section"><h3>Identified dates</h3>{resume.dates.length ? resume.dates.map((date, index) => <div className="date-evidence" key={`${date.value}-${index}`}><label className="field-label">Date<input value={date.value} onChange={event => updateDates(resume.dates.map((item, i) => i === index ? { ...item, value: event.target.value } : item))} /></label><span>{date.source_section}</span><blockquote>{date.evidence}</blockquote><button className="remove-button" onClick={() => updateDates(resume.dates.filter((_, i) => i !== index))}>Remove date</button></div>) : <p className="hint">No dates were confidently identified.</p>}</section>
       {resume.missing_or_ambiguous.length > 0 && <div className="notice"><strong>Not identified or ambiguous:</strong> {resume.missing_or_ambiguous.join(", ")}. You can add or correct information while reviewing.</div>}
       <div className="notice">Proficiency is not assessed. Mentioning a skill is not evidence of mastery. Nothing is saved to a server.</div>
-      <button className="accept-button" onClick={() => { setAccepted(true); onAccept(resume); }}>{accepted ? "Resume extraction accepted" : "Accept reviewed extraction"}</button>{accepted && <p className="success" role="status">Accepted in this browser session only. Open Profile Builder to prefill a candidate profile.</p>}
+      <button className="accept-button" disabled={accepted} onClick={() => { setAccepted(true); onAccept(resume); }}>{accepted ? "Resume extraction accepted" : "Accept reviewed extraction"}</button>{accepted && <div className="success workflow-next-step" role="status"><p>Accepted in this browser session only. The original parsed artifact stays separate from profile edits.</p><button onClick={onBuildProfile}>Build Profile from Resume</button></div>}
     </section>}
     <footer><span>RADIX TALENT MATCH</span><span>Resume claims stay evidence-linked · No scores</span></footer>
   </main>;

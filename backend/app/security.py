@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import httpx
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -8,6 +10,19 @@ from .config import get_settings
 from .errors import AuthConfigurationRequired, RadixError
 
 bearer = HTTPBearer(auto_error=False)
+
+
+def require_local_workflow_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+) -> dict:
+    """Allow anonymous access to stateless workflow endpoints only in explicit local mode."""
+    local_mode = (
+        os.getenv("RADIX_ENV", "production").casefold() == "development"
+        and os.getenv("RADIX_JD_AUTH_MODE", "supabase").casefold() == "local"
+    )
+    if local_mode:
+        return {"id": "local-development"}
+    return require_supabase_user(credentials)
 
 
 def require_supabase_user(

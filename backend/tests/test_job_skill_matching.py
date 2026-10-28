@@ -148,9 +148,20 @@ def test_matching_endpoint_keeps_supabase_auth_outside_explicit_local_mode(monke
     assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
 
 
-def test_matching_endpoint_stays_protected_in_jd_only_local_mode(monkeypatch):
+def test_matching_endpoint_allows_anonymous_access_in_explicit_local_mode(monkeypatch):
     monkeypatch.setenv("RADIX_ENV", "development")
     monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
+    payload = {"job_description": jd([job_skill("Python")]).model_dump(mode="json"), "candidate_profile": profile(skills=[{"skill_name": "Python", "category_code": "COD", "source": "manual", "evidence_kind": "manual"}]).model_dump(mode="json")}
+    with TestClient(app) as client:
+        response = client.post("/api/v1/skill-matches", json=payload)
+    assert response.status_code == 200
+    assert len(response.json()["matched"]) == 1
+    assert response.json()["persisted"] is False
+
+
+def test_matching_endpoint_requires_authentication_when_local_mode_is_not_configured(monkeypatch):
+    monkeypatch.delenv("RADIX_ENV", raising=False)
+    monkeypatch.delenv("RADIX_JD_AUTH_MODE", raising=False)
     with TestClient(app) as client:
         response = client.post("/api/v1/skill-matches", json={})
     assert response.status_code == 401

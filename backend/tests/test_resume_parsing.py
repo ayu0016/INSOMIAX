@@ -140,19 +140,28 @@ def test_resume_endpoint_reports_unsupported_malformed_oversized_and_invalid_tex
 
 
 def test_resume_parse_preserves_protected_auth_default(monkeypatch):
-    monkeypatch.setenv("RADIX_ENV", "production")
-    monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
-    with TestClient(app) as client:
-        response = client.post("/api/v1/resume-parsing/parse", json={"text": sample_resume()})
-    assert response.status_code == 401
-    assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+    configurations = ((None, None), ("development", None), (None, "local"), ("production", "local"))
+    for environment, auth_mode in configurations:
+        if environment is None:
+            monkeypatch.delenv("RADIX_ENV", raising=False)
+        else:
+            monkeypatch.setenv("RADIX_ENV", environment)
+        if auth_mode is None:
+            monkeypatch.delenv("RADIX_JD_AUTH_MODE", raising=False)
+        else:
+            monkeypatch.setenv("RADIX_JD_AUTH_MODE", auth_mode)
+        with TestClient(app) as client:
+            extracted = client.post("/api/v1/resume-parsing/extract", files={"file": ("resume.docx", make_docx(sample_resume()), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
+            parsed = client.post("/api/v1/resume-parsing/parse", json={"text": sample_resume()})
+        assert extracted.status_code == parsed.status_code == 401
+        assert extracted.json()["error"]["code"] == parsed.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
 
 
-def test_resume_routes_do_not_inherit_jd_local_anonymous_access(monkeypatch):
+def test_resume_routes_allow_anonymous_access_in_explicit_local_mode(monkeypatch):
     monkeypatch.setenv("RADIX_ENV", "development")
     monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
     with TestClient(app) as client:
         extracted = client.post("/api/v1/resume-parsing/extract", files={"file": ("resume.docx", make_docx(sample_resume()), "application/vnd.openxmlformats-officedocument.wordprocessingml.document")})
         parsed = client.post("/api/v1/resume-parsing/parse", json={"text": sample_resume()})
-    assert extracted.status_code == parsed.status_code == 401
-    assert extracted.json()["error"]["code"] == parsed.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+    assert extracted.status_code == parsed.status_code == 200
+    assert parsed.json()["source_type"] == "resume"

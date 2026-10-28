@@ -1,11 +1,11 @@
 import { useState } from "react";
-import ResumeParsing, { type ResumeDraft } from "./ResumeParsing";
+import ResumeParsing from "./ResumeParsing";
 import ProfileBuilder from "./ProfileBuilder";
 import JobSkillMatching from "./JobSkillMatching";
 import CompanyTalentCheck from "./CompanyTalentCheck";
 import Dashboard from "./Dashboard";
 import ModuleNavigation from "./ModuleNavigation";
-import type { AcceptedArtifact, CandidateProfile, EvidenceText, JDAnalysisResult, ModuleId, SkillEvidence } from "./contracts";
+import type { AcceptedArtifact, CandidateProfile, EvidenceText, JDAnalysisResult, ModuleId, ResumeParseArtifact, SkillEvidence } from "./contracts";
 type Extracted = { filename: string; text: string; character_count: number };
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
@@ -17,7 +17,8 @@ async function apiError(response: Response): Promise<Error> {
 
 export default function App() {
   const [activeModule, setActiveModule] = useState<ModuleId>("dashboard");
-  const [acceptedResume, setAcceptedResume] = useState<ResumeDraft | null>(null);
+  const [acceptedResume, setAcceptedResume] = useState<AcceptedArtifact<ResumeParseArtifact> | null>(null);
+  const [profilePrefillRequest, setProfilePrefillRequest] = useState(0);
   const [acceptedJds, setAcceptedJds] = useState<AcceptedArtifact<JDAnalysisResult>[]>([]);
   const [acceptedProfiles, setAcceptedProfiles] = useState<AcceptedArtifact<CandidateProfile>[]>([]);
   const [file, setFile] = useState<File | null>(null);
@@ -58,6 +59,17 @@ export default function App() {
   function acceptCandidateProfile(data: CandidateProfile) {
     const label = [data.name?.value, data.source_file].filter(Boolean).join(" · ") || "Candidate profile";
     setAcceptedProfiles(current => [...current, { id: crypto.randomUUID(), label, data }]);
+  }
+
+  function acceptResumeDraft(data: ResumeParseArtifact) {
+    const label = [data.candidate_name?.value, data.source_file].filter(Boolean).join(" · ") || "Reviewed resume";
+    setAcceptedResume({ id: crypto.randomUUID(), label, data });
+  }
+
+  function buildProfileFromResume() {
+    if (!acceptedResume) return;
+    setProfilePrefillRequest(request => request + 1);
+    setActiveModule("profile");
   }
 
   function updateSkill(group: keyof Pick<JDAnalysisResult, "required_skills" | "preferred_skills" | "unclassified_requirement_skills">, index: number, patch: Partial<SkillEvidence>) {
@@ -125,8 +137,8 @@ export default function App() {
     </section>}
     <footer><span>RADIX TALENT MATCH</span><span>Evidence linked · No fabricated scores</span></footer>
   </main></div>
-  <div hidden={activeModule !== "resume"}><ResumeParsing onNavigate={setActiveModule} onAccept={setAcceptedResume} onInvalidate={() => setAcceptedResume(null)} /></div>
-  <div hidden={activeModule !== "profile"}><ProfileBuilder resumeDraft={acceptedResume} onNavigate={setActiveModule} onAccept={acceptCandidateProfile} /></div>
+  <div hidden={activeModule !== "resume"}><ResumeParsing onNavigate={setActiveModule} onAccept={acceptResumeDraft} onInvalidate={() => setAcceptedResume(null)} onBuildProfile={buildProfileFromResume} /></div>
+  <div hidden={activeModule !== "profile"}><ProfileBuilder resumeDraft={acceptedResume?.data || null} prefillRequest={profilePrefillRequest} onNavigate={setActiveModule} onAccept={acceptCandidateProfile} /></div>
   <div hidden={activeModule !== "matching"}><JobSkillMatching jobDescriptions={acceptedJds} candidateProfiles={acceptedProfiles} onNavigate={setActiveModule} /></div>
   <div hidden={activeModule !== "talent"}><CompanyTalentCheck onNavigate={setActiveModule} /></div>
   </>;

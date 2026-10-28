@@ -48,8 +48,8 @@ export default function JobSkillMatching({ jobDescriptions, candidateProfiles, o
         {selectedJob && <div><strong>Job:</strong> {selectedJob.label}<button className="text-button" onClick={() => onNavigate("jd")}>Review source</button></div>}
         {selectedProfile && <div><strong>Candidate:</strong> {selectedProfile.label}<button className="text-button" onClick={() => onNavigate("profile")}>Review source</button></div>}
       </div>}
-      {!jobDescriptions.length && <div className="notice">No accepted JD Analytics result is available. Analyze and accept a job description first.</div>}
-      {!candidateProfiles.length && <div className="notice">No accepted candidate profile is available. Review and accept a profile in Profile Builder first.</div>}
+      {!jobDescriptions.length && <div className="notice">No accepted JD Analytics result is available. Analyze and accept a job description first. <button className="text-button" onClick={() => onNavigate("jd")}>Open JD Analytics</button></div>}
+      {!candidateProfiles.length && <div className="notice">No accepted candidate profile is available. Review and accept a profile in Profile Builder first. <button className="text-button" onClick={() => onNavigate("profile")}>Open Profile Builder</button></div>}
       <button onClick={compare} disabled={busy || !jobId || !profileId}>{busy ? "Comparing…" : "Compare documented skills"}</button>
       {error && <div className="notice notice-error" role="alert">{error}</div>}
     </section>

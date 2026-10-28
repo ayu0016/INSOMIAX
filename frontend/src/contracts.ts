@@ -38,6 +38,20 @@ export type ProfileSkill = {
   evidence_kind: "explicit" | "inferred" | "manual"; proficiency_level: number | null;
   proficiency_status: "not_assessed" | "user_reported";
 };
+export type ResumeContact = { value: string; evidence: string } | null;
+export type ResumeEntry = { text: string; evidence: string; source_section: string; dates: string | null; duration: string | null };
+export type ResumeSkill = {
+  skill_name: string; canonical_skill: string | null; category_code: string; evidence: string; confidence: "high" | "medium" | "low";
+  source_section: string; evidence_kind: "explicit" | "inferred"; proficiency_level: number | null; proficiency_status: "not_assessed";
+};
+export type ResumeParseArtifact = {
+  source_type: "resume"; source_file: string | null; extraction_method: "deterministic"; extraction_status: "draft";
+  candidate_name: ResumeContact; email: ResumeContact; phone: ResumeContact;
+  education: ResumeEntry[]; work_experience: ResumeEntry[]; internships: ResumeEntry[]; projects: ResumeEntry[];
+  skills: ResumeSkill[]; certifications: ResumeEntry[];
+  dates: { value: string; evidence: string; source_section: string }[]; missing_or_ambiguous: string[];
+  proficiency_assessed: false; scores_available: false;
+};
 export type CandidateProfile = {
   name: ProfileField | null; email: ProfileField | null; phone: ProfileField | null;
   education: ProfileEntry[]; work_experience: ProfileEntry[]; internships: ProfileEntry[]; projects: ProfileEntry[];

@@ -119,9 +119,15 @@ def test_readiness_request_rejects_other_and_invalid_levels(client):
         assert response.json()["error"]["code"] == "VALIDATION_ERROR"
 
 
-def test_protected_source_endpoint_requires_bearer_token(client):
+def test_company_talent_check_stays_protected_even_in_local_workflow_mode(client, monkeypatch):
     from app.main import app
+    monkeypatch.setenv("RADIX_ENV", "development")
+    monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
     app.dependency_overrides.pop(require_supabase_user, None)
-    response = client.get("/api/v1/talent-check/source")
-    assert response.status_code == 401
-    assert response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED"
+    responses = [
+        client.get("/api/v1/talent-check/source"),
+        client.get("/api/v1/talent-check/competencies"),
+        client.post("/api/v1/talent-check/readiness", json={"company_identifier": "x", "candidate_skill_levels": {}}),
+    ]
+    assert all(response.status_code == 401 for response in responses)
+    assert all(response.json()["error"]["code"] == "AUTHENTICATION_REQUIRED" for response in responses)

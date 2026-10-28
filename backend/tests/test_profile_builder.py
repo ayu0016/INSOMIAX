@@ -72,9 +72,19 @@ def test_profile_preview_api_returns_validation_error_envelope_for_authenticated
     assert "request_id" in invalid.json()["error"]
 
 
-def test_profile_preview_requires_supabase_auth_even_in_jd_local_mode(monkeypatch):
+def test_profile_preview_allows_anonymous_access_in_explicit_local_mode(monkeypatch):
     monkeypatch.setenv("RADIX_ENV", "development")
     monkeypatch.setenv("RADIX_JD_AUTH_MODE", "local")
+    with TestClient(app) as client:
+        response = client.post("/api/v1/profiles/preview", json=example_profile())
+    assert response.status_code == 200
+    assert response.json()["profile"]["name"]["value"] == "Asha Verma"
+    assert response.json()["persistence_available"] is False
+
+
+def test_profile_preview_requires_authentication_when_local_mode_is_not_configured(monkeypatch):
+    monkeypatch.delenv("RADIX_ENV", raising=False)
+    monkeypatch.delenv("RADIX_JD_AUTH_MODE", raising=False)
     with TestClient(app) as client:
         response = client.post("/api/v1/profiles/preview", json=example_profile())
     assert response.status_code == 401
